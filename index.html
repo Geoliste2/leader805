@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Leader 805">
+  <meta name="theme-color" content="#0B2845">
+  <link rel="manifest" href="manifest.json">
+  <title>Leader 805 — Carnet de Bord</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;overflow:hidden;background:#0B2845}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#1A1A1A;-webkit-tap-highlight-color:transparent}
+    #root{height:100%}
+    input,select,textarea,button{font-family:inherit}
+    ::-webkit-scrollbar{display:none}
+    .scroll{overflow-y:auto;-webkit-overflow-scrolling:touch}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script type="text/babel">
+const{useState,useEffect,useCallback}=React;
+
+// ── Supabase ────────────────────────────────────────────────────────────────
+const SUPA_URL='https://bpboyrmgluzvdowhfvoj.supabase.co';
+const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwYm95cm1nbHV6dmRvd2hmdm9qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4OTI5NDAsImV4cCI6MjA5MzQ2ODk0MH0.TDpw7cC3CCuG2lcWeo2QaVd2XdBXIZMyo5m1Dy6sc8M';
+const db=supabase.createClient(SUPA_URL,SUPA_KEY);
+
+// ── Constants ───────────────────────────────────────────────────────────────
+const CODE_KEY='leader805_code';
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
+
+const CREW=['Stéphane','Aurélie','Louise','Garance','Olivier','Lubin','Autre'];
+
+const CATS=[
+  {id:'fuel',label:'Carburant',icon:'⛽',bg:'#FFF3DC',fg:'#9A6000'},
+  {id:'maintenance',label:'Entretien',icon:'🔧',bg:'#DCEEFF',fg:'#0A4F9C'},
+  {id:'repair',label:'Réparation',icon:'🛠️',bg:'#FFE8E0',fg:'#8C2800'},
+  {id:'port',label:'Port',icon:'⚓',bg:'#D6F5EA',fg:'#0A5C3E'},
+  {id:'insurance',label:'Assurance',icon:'🛡️',bg:'#EDE8FF',fg:'#3D2DB0'},
+  {id:'other',label:'Autre',icon:'📦',bg:'#EBEBEB',fg:'#444'},
+];
+
+const CHECK_DEP=[
+  'Carburant suffisant','Gilets de sauvetage','VHF chargée / allumée','Feux de navigation OK',
+  'Ancre et chaîne','Extincteur accessible','Fusées de détresse','Trousse de premiers secours',
+  'Carte marine à bord','Météo consultée','Amarres et défenses OK','Téléphone chargé',
+];
+const CHECK_RET=[
+  'Bateau bien amarré','Moteur arrêté','Robinets / vannes fermés','Électronique éteinte',
+  'Portière verrouillée','Bateau rincé','Équipements rangés','Réservoir noté',
+];
+
+const SEA=['Calme (0)','Ridée (1)','Belle (2)','Peu agitée (3)','Agitée (4)','Forte (5)','Très forte (6+)'];
+const WIND=['0 — Calme','1-2 — Légère brise','3-4 — Petite brise','5-6 — Brise fraîche','7+ — Grand frais / Coup de vent'];
+
+const EMERGENCY=[
+  {name:'SNSM — Sauvetage en mer',num:'196',icon:'🚨',color:'#C62828',bg:'#FFEBEE',note:'Numéro national — 24h/24'},
+  {name:'CROSS Méditerranée (La Garde)',num:'04 94 61 16 16',icon:'📡',color:'#1565C0',bg:'#E3F2FD',note:'Coordination sauvetage'},
+  {name:'SNSM Carry-le-Rouet',num:'04 42 45 00 18',icon:'🚤',color:'#C62828',bg:'#FFEBEE',note:'Station locale Côte Bleue'},
+  {name:'Sémaphore du Planier',num:'04 91 73 53 06',icon:'🏗️',color:'#E65100',bg:'#FFF3E0',note:'Zone Marseille — Côte Bleue'},
+  {name:'Météo Marine',num:'3250',icon:'🌊',color:'#00695C',bg:'#E0F2F1',note:'Zone Marseille / Lion'},
+  {name:'SAMU',num:'15',icon:'🏥',color:'#C62828',bg:'#FFEBEE',note:'Urgences médicales'},
+  {name:'Gendarmerie Maritime',num:'17',icon:'👮',color:'#1565C0',bg:'#E3F2FD',note:'Police en mer'},
+  {name:'Capitainerie Carro',num:'04 42 80 70 08',icon:'⚓',color:'#4E342E',bg:'#EFEBE9',note:'Port d\'attache zone'},
+  {name:'Capitainerie Carry-le-Rouet',num:'04 42 45 00 54',icon:'⚓',color:'#4E342E',bg:'#EFEBE9',note:'Côte Bleue'},
+  {name:'Capitainerie Vieux-Port',num:'04 91 55 31 28',icon:'⚓',color:'#4E342E',bg:'#EFEBE9',note:'Marseille'},
+  {name:'Assurance bateau',num:'',icon:'🛡️',color:'#4527A0',bg:'#EDE7F6',note:'À renseigner'},
+];
+
+const MOUILLAGES=[
+  {name:'Calanque de Niolon',icon:'🏖️',note:'Mouillage protégé, fond sable. Accès difficile par la route — idéal bateau.',dist:'~8 mn de Carro'},
+  {name:'Carry-le-Rouet',icon:'⚓',note:'Port et mouillage face à la plage. Passage obligé sur la Côte Bleue.',dist:'Côte Bleue'},
+  {name:'Sausset-les-Pins',icon:'🌲',note:'Mouillage devant le port, bonne tenue par mistral modéré.',dist:'Côte Bleue'},
+  {name:'Île Tiboulen de Maïre',icon:'🏝️',note:'Eaux transparentes. Attention coups de vent du sud.',dist:'Archipel Marseille'},
+  {name:'Îles du Frioul',icon:'🏝️',note:'Eaux cristallines. Mistral à surveiller. Port-Frioul ou Ratonneau.',dist:'Devant Marseille'},
+  {name:'Calanque de Sormiou',icon:'⛵',note:'Réservation en saison. Eaux exceptionnelles, fond sable blanc.',dist:'Calanques Marseille'},
+  {name:'Calanque de Morgiou',icon:'⛵',note:'Plus sauvage que Sormiou. Peu de places — arriver tôt.',dist:'Calanques Marseille'},
+  {name:'Cassis',icon:'🍷',note:'Port ou coffre. Belle escale pour déjeuner à terre.',dist:'Est Marseille'},
+  {name:'La Ciotat — Île Verte',icon:'🌿',note:'Mouillage abrité derrière l\'île. Fond sable, bonne tenue.',dist:'La Ciotat'},
+  {name:'Île de Bendor',icon:'🏝️',note:'Port privé, escale agréable. Accès facile.',dist:'Bandol'},
+  {name:'Porquerolles — Plage d\'Argent',icon:'💎',note:'Mouillage très fréquenté en été — arriver avant 9h.',dist:'Îles d\'Or'},
+  {name:'Porquerolles — Notre-Dame',icon:'🏖️',note:'Face nord, plus abrité. Fond sable, bon mouillage.',dist:'Îles d\'Or'},
+];
+
+const BOAT_SPECS=[
+  ['Modèle','Jeanneau Leader 805'],['Longueur','8,05 m'],['Largeur','2,55 m'],
+  ['Motorisation','Diesel inboard'],['Immatriculation','—'],
+  ['Port d\'attache','Côte Bleue'],['Propriétaires','Stéphane & Olivier MARCH'],
+];
+
+const DOCS=[
+  {icon:'🗺️',name:'Carte de navigation'},
+  {icon:'🪪',name:'Permis côtier — Stéphane'},
+  {icon:'🪪',name:'Permis côtier — Olivier'},
+  {icon:'🛡️',name:'Assurance bateau'},
+  {icon:'📄',name:'Acte de francisation'},
+  {icon:'📻',name:'Licence VHF'},
+  {icon:'🔎',name:'Certificat CE'},
+  {icon:'🧾',name:'Certificat d\'immatriculation'},
+];
+
+// ── Style helpers ───────────────────────────────────────────────────────────
+const inp={width:'100%',padding:'10px 12px',borderRadius:8,border:'1px solid #D0D0D0',background:'#FAFAFA',color:'#1A1A1A',fontSize:13,outline:'none',boxSizing:'border-box'};
+const btn=(bg='#0B2845',fg='white')=>({padding:'10px 18px',borderRadius:10,background:bg,color:fg,border:'none',cursor:'pointer',fontSize:13,fontWeight:600});
+
+// ── Login ───────────────────────────────────────────────────────────────────
+function LoginScreen({onLogin}){
+  const[code,setCode]=useState('');
+  const[loading,setLoading]=useState(false);
+  const[error,setError]=useState('');
+
+  const go=async()=>{
+    if(!code.trim())return;
+    setLoading(true);setError('');
+    try{
+      const{error:err}=await db.from('trips').select('id').eq('boat_code',code.toUpperCase()).limit(1);
+      if(err)throw err;
+      localStorage.setItem(CODE_KEY,code.toUpperCase());
+      onLogin(code.toUpperCase());
+    }catch{setError('Code incorrect ou connexion impossible.');}
+    setLoading(false);
+  };
+
+  return(
+    <div style={{minHeight:'100vh',background:'linear-gradient(160deg,#0B2845 0%,#1A4A7A 60%,#0D3560 100%)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32}}>
+      <div style={{fontSize:72,marginBottom:16}}>⚓</div>
+      <div style={{fontSize:26,fontWeight:700,color:'white',marginBottom:4}}>Leader 805</div>
+      <div style={{fontSize:14,color:'rgba(255,255,255,.6)',marginBottom:48}}>Carnet de bord familial</div>
+      <div style={{width:'100%',maxWidth:340,background:'white',borderRadius:20,padding:28,boxShadow:'0 20px 60px rgba(0,0,0,.35)'}}>
+        <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>Code bateau</div>
+        <div style={{fontSize:12,color:'#888',marginBottom:16}}>Entrez le code partagé par Stéphane</div>
+        <input type="text" value={code} onChange={e=>setCode(e.target.value.toUpperCase())} onKeyDown={e=>e.key==='Enter'&&go()} placeholder="LEADER805" style={{...inp,fontSize:22,fontWeight:700,textAlign:'center',letterSpacing:'.12em',marginBottom:12}}/>
+        {error&&<div style={{fontSize:12,color:'#C62828',marginBottom:12,textAlign:'center'}}>{error}</div>}
+        <button onClick={go} disabled={loading||!code} style={{...btn(),width:'100%',padding:14,fontSize:15,borderRadius:12,opacity:loading||!code?.5:1}}>
+          {loading?'Connexion…':'→ Accéder au carnet'}
+        </button>
+        <div style={{marginTop:16,fontSize:11,color:'#BBB',textAlign:'center'}}>
+          Partagez ce code avec Olivier et Lubin
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── App ─────────────────────────────────────────────────────────────────────
+function App(){
+  const saved=localStorage.getItem(CODE_KEY);
+  const[boatCode,setBoatCode]=useState(saved||'');
+  const[tab,setTab]=useState(0);
+  const[trips,setTrips]=useState([]);
+  const[expenses,setExpenses]=useState([]);
+  const[view,setView]=useState('list');
+  const[editItem,setEditItem]=useState(null);
+  const[loading,setLoading]=useState(false);
+  const[syncing,setSyncing]=useState(false);
+  const[online,setOnline]=useState(navigator.onLine);
+
+  useEffect(()=>{
+    const on=()=>setOnline(true),off=()=>setOnline(false);
+    window.addEventListener('online',on);window.addEventListener('offline',off);
+    return()=>{window.removeEventListener('online',on);window.removeEventListener('offline',off);};
+  },[]);
+
+  const loadAll=useCallback(async code=>{
+    if(!code)return;
+    setLoading(true);
+    try{
+      const[{data:t},{data:e}]=await Promise.all([
+        db.from('trips').select('*').eq('boat_code',code).order('created_at',{ascending:true}),
+        db.from('expenses').select('*').eq('boat_code',code).order('created_at',{ascending:true}),
+      ]);
+      if(t)setTrips(t.map(r=>({...r.data,id:r.id})));
+      if(e)setExpenses(e.map(r=>({...r.data,id:r.id})));
+    }catch{}
+    setLoading(false);
+  },[]);
+
+  useEffect(()=>{if(boatCode)loadAll(boatCode);},[boatCode]);
+
+  // Temps réel
+  useEffect(()=>{
+    if(!boatCode)return;
+    const ch=db.channel('boat-'+boatCode)
+      .on('postgres_changes',{event:'*',schema:'public',table:'trips'},()=>loadAll(boatCode))
+      .on('postgres_changes',{event:'*',schema:'public',table:'expenses'},()=>loadAll(boatCode))
+      .subscribe();
+    return()=>ch.unsubscribe();
+  },[boatCode]);
+
+  const upsertTrip=async trip=>{
+    setSyncing(true);
+    setTrips(p=>p.find(t=>t.id===trip.id)?p.map(t=>t.id===trip.id?trip:t):[...p,trip]);
+    await db.from('trips').upsert({id:trip.id,boat_code:boatCode,data:trip,updated_at:new Date().toISOString()});
+    setSyncing(false);
+  };
+
+  const deleteTrip=async id=>{
+    setTrips(p=>p.filter(t=>t.id!==id));
+    await db.from('trips').delete().eq('id',id);
+  };
+
+  const upsertExpense=async expense=>{
+    setSyncing(true);
+    setExpenses(p=>p.find(e=>e.id===expense.id)?p.map(e=>e.id===expense.id?expense:e):[...p,expense]);
+    await db.from('expenses').upsert({id:expense.id,boat_code:boatCode,data:expense,updated_at:new Date().toISOString()});
+    setSyncing(false);
+  };
+
+  const deleteExpense=async id=>{
+    setExpenses(p=>p.filter(e=>e.id!==id));
+    await db.from('expenses').delete().eq('id',id);
+  };
+
+  const navTo=i=>{setTab(i);setView('list');setEditItem(null);};
+
+  if(!boatCode)return<LoginScreen onLogin={setBoatCode}/>;
+
+  const totalExp=expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+  const totalHours=trips.reduce((s,t)=>{const h=(parseFloat(t.engineEnd)||0)-(parseFloat(t.engineStart)||0);return s+(h>0?h:0);},0);
+
+  const TABS=[{icon:'⚓',label:'Accueil'},{icon:'📓',label:'Carnet'},{icon:'💶',label:'Dépenses'},{icon:'📋',label:'Admin'},{icon:'🆘',label:'Urgences'}];
+
+  return(
+    <div style={{maxWidth:430,margin:'0 auto',height:'100vh',display:'flex',flexDirection:'column',background:'#F5F6F8'}}>
+      {/* Header */}
+      <div style={{background:'#0B2845',color:'white',padding:'12px 18px 10px',flexShrink:0}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{fontSize:10,opacity:.6,letterSpacing:'.12em',textTransform:'uppercase'}}>Jeanneau Leader 805</div>
+            <div style={{fontSize:16,fontWeight:700}}>{TABS[tab].icon} {TABS[tab].label}</div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            {syncing&&<div style={{fontSize:10,opacity:.7}}>↑ sync…</div>}
+            <div style={{width:8,height:8,borderRadius:4,background:online?'#4CAF50':'#EF5350'}}/>
+            <div style={{fontSize:10,opacity:.6}}>{boatCode}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="scroll" style={{flex:1,paddingBottom:70}}>
+        {loading&&!trips.length&&!expenses.length?(
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:300,gap:12}}>
+            <div style={{fontSize:40}}>⚓</div>
+            <div style={{fontSize:13,color:'#888'}}>Chargement…</div>
+          </div>
+        ):(
+          <>
+            {tab===0&&<Dashboard trips={trips} expenses={expenses} totalHours={totalHours} totalExp={totalExp} navTo={navTo} boatCode={boatCode}/>}
+            {tab===1&&<LogbookTab trips={trips} upsertTrip={upsertTrip} deleteTrip={deleteTrip} view={view} setView={setView} editItem={editItem} setEditItem={setEditItem}/>}
+            {tab===2&&<ExpensesTab expenses={expenses} upsertExpense={upsertExpense} deleteExpense={deleteExpense} view={view} setView={setView} editItem={editItem} setEditItem={setEditItem} totalExp={totalExp}/>}
+            {tab===3&&<AdminTab/>}
+            {tab===4&&<EmergencyTab/>}
+          </>
+        )}
+      </div>
+
+      {/* Bottom nav */}
+      <div style={{position:'fixed',bottom:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:430,background:'white',borderTop:'1px solid #E0E0E0',display:'flex',zIndex:200,paddingBottom:'env(safe-area-inset-bottom)'}}>
+        {TABS.map((t,i)=>(
+          <button key={i} onClick={()=>navTo(i)} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'8px 4px 10px',background:'none',border:'none',cursor:'pointer',color:tab===i?'#0B2845':'#999',fontFamily:'inherit'}}>
+            <span style={{fontSize:20}}>{t.icon}</span>
+            <span style={{fontSize:10,fontWeight:tab===i?700:400}}>{t.label}</span>
+            {tab===i&&<div style={{width:20,height:2,borderRadius:1,background:'#0B2845'}}/>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Dashboard ────────────────────────────────────────────────────────────────
+function Dashboard({trips,expenses,totalHours,totalExp,navTo,boatCode}){
+  const lastTrip=trips.length?trips[trips.length-1]:null;
+  const yr=new Date().getFullYear(),mo=new Date().getMonth();
+  const tripsYr=trips.filter(t=>new Date(t.date).getFullYear()===yr).length;
+  const expMo=expenses.filter(e=>new Date(e.date).getMonth()===mo).reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+
+  return(
+    <div style={{padding:16}}>
+      <div style={{background:'linear-gradient(135deg,#0B2845,#1A4A7A)',borderRadius:16,padding:'18px',marginBottom:14,color:'white',position:'relative',overflow:'hidden'}}>
+        <div style={{position:'absolute',right:-10,top:-10,fontSize:80,opacity:.07}}>⚓</div>
+        <div style={{fontSize:10,opacity:.7,letterSpacing:'.1em',marginBottom:10}}>CÔTE BLEUE · MÉDITERRANÉE</div>
+        <div style={{display:'flex',gap:20}}>
+          <div><div style={{fontSize:24,fontWeight:700}}>{totalHours.toFixed(1)}h</div><div style={{fontSize:10,opacity:.7}}>Moteur total</div></div>
+          <div style={{width:1,background:'rgba(255,255,255,.2)'}}/>
+          <div><div style={{fontSize:24,fontWeight:700}}>{tripsYr}</div><div style={{fontSize:10,opacity:.7}}>Sorties {yr}</div></div>
+          <div style={{width:1,background:'rgba(255,255,255,.2)'}}/>
+          <div><div style={{fontSize:24,fontWeight:700}}>{totalExp.toFixed(0)}€</div><div style={{fontSize:10,opacity:.7}}>Dépenses</div></div>
+        </div>
+        <div style={{marginTop:10,fontSize:10,opacity:.6,display:'flex',alignItems:'center',gap:6}}>
+          <span style={{width:6,height:6,borderRadius:3,background:'#4CAF50',display:'inline-block'}}/>
+          Synchronisé avec Olivier & Lubin · {boatCode}
+        </div>
+      </div>
+
+      <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>DERNIÈRE SORTIE</div>
+      {lastTrip?(
+        <div style={{background:'white',borderRadius:12,padding:14,marginBottom:14,border:'1px solid #E8E8E8'}}>
+          <div style={{display:'flex',justifyContent:'space-between'}}>
+            <div>
+              <div style={{fontSize:14,fontWeight:600}}>{lastTrip.route||'Sortie sans nom'}</div>
+              <div style={{fontSize:12,color:'#888',marginTop:2}}>{new Date(lastTrip.date).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</div>
+            </div>
+            {lastTrip.departTime&&<div style={{fontSize:12,color:'#888'}}>{lastTrip.departTime}{lastTrip.returnTime?` → ${lastTrip.returnTime}`:''}</div>}
+          </div>
+          {lastTrip.crew?.length>0&&<div style={{marginTop:8,fontSize:12,color:'#555'}}>👥 {lastTrip.crew.join(', ')}</div>}
+        </div>
+      ):(
+        <div style={{background:'white',borderRadius:12,padding:24,marginBottom:14,textAlign:'center',border:'1px dashed #D0D0D0'}}>
+          <div style={{fontSize:36,marginBottom:8}}>📓</div>
+          <div style={{fontSize:13,color:'#888'}}>Aucune sortie enregistrée</div>
+          <button onClick={()=>navTo(1)} style={{...btn(),marginTop:12,fontSize:12,padding:'8px 16px'}}>+ Première sortie</button>
+        </div>
+      )}
+
+      <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>ACCÈS RAPIDE</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:14}}>
+        {[{icon:'📓',label:'Nouvelle sortie',fn:()=>navTo(1),bg:'#EBF0FF',fg:'#1A3A8F'},
+          {icon:'💶',label:'Dépense',fn:()=>navTo(2),bg:'#FFF5E0',fg:'#8C5A00'},
+          {icon:'🆘',label:'Urgences',fn:()=>navTo(4),bg:'#FFEBEE',fg:'#C62828'}
+        ].map((a,i)=>(
+          <button key={i} onClick={a.fn} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6,padding:'14px 8px',borderRadius:12,background:a.bg,border:'none',cursor:'pointer',fontFamily:'inherit'}}>
+            <span style={{fontSize:24}}>{a.icon}</span>
+            <span style={{fontSize:10,fontWeight:600,color:a.fg,textAlign:'center',lineHeight:1.3}}>{a.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <div style={{background:'white',borderRadius:12,padding:14,border:'1px solid #E8E8E8'}}>
+        <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:10}}>CE MOIS-CI</div>
+        <div style={{display:'flex',justifyContent:'space-around'}}>
+          <div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:700}}>{trips.filter(t=>new Date(t.date).getMonth()===mo).length}</div><div style={{fontSize:10,color:'#888'}}>sorties</div></div>
+          <div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:700}}>{expMo.toFixed(0)}€</div><div style={{fontSize:10,color:'#888'}}>dépenses</div></div>
+          <div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:700}}>{(totalExp/2).toFixed(0)}€</div><div style={{fontSize:10,color:'#888'}}>part Stéphane</div></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Logbook ──────────────────────────────────────────────────────────────────
+function LogbookTab({trips,upsertTrip,deleteTrip,view,setView,editItem,setEditItem}){
+  if(view==='form')return<TripForm trip={editItem} onSave={async t=>{await upsertTrip({...t,id:t.id||uid()});setView('list');setEditItem(null);}} onCancel={()=>{setView('list');setEditItem(null);}}/>;
+  if(view==='detail')return<TripDetail trip={editItem} onBack={()=>{setView('list');setEditItem(null);}} onEdit={()=>setView('form')} onDelete={async()=>{await deleteTrip(editItem.id);setView('list');setEditItem(null);}}/>;
+
+  return(
+    <div style={{padding:16}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div style={{fontSize:16,fontWeight:700}}>Sorties ({trips.length})</div>
+        <button onClick={()=>{setEditItem(null);setView('form');}} style={btn()}>+ Nouvelle sortie</button>
+      </div>
+      {!trips.length?(
+        <div style={{textAlign:'center',padding:'50px 20px',color:'#888'}}>
+          <div style={{fontSize:48,marginBottom:12}}>🌊</div>
+          <div style={{fontSize:14,fontWeight:600}}>Carnet vide</div>
+          <div style={{fontSize:12,marginTop:4}}>Enregistrez votre première sortie en mer</div>
+        </div>
+      ):(
+        [...trips].reverse().map(trip=>{
+          const dur=trip.engineStart&&trip.engineEnd?Math.max(0,(parseFloat(trip.engineEnd)-parseFloat(trip.engineStart))).toFixed(1):null;
+          return(
+            <div key={trip.id} onClick={()=>{setEditItem(trip);setView('detail');}} style={{background:'white',borderRadius:12,padding:14,marginBottom:10,border:'1px solid #E8E8E8',cursor:'pointer'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:600}}>{trip.route||'Sortie sans nom'}</div>
+                  <div style={{fontSize:12,color:'#888',marginTop:2}}>{new Date(trip.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}</div>
+                </div>
+                <div style={{textAlign:'right',fontSize:11,color:'#888'}}>
+                  {trip.departTime&&<div>{trip.departTime}{trip.returnTime?`→${trip.returnTime}`:''}</div>}
+                  {dur&&<div style={{marginTop:2}}>⏱ {dur}h</div>}
+                </div>
+              </div>
+              <div style={{marginTop:8,display:'flex',gap:6,flexWrap:'wrap'}}>
+                {trip.crew?.length>0&&<Tag>👥 {trip.crew.join(' · ')}</Tag>}
+                {trip.windForce&&<Tag>💨 {trip.windForce.split('—')[0].trim()}</Tag>}
+                {trip.seaState&&<Tag>🌊 {trip.seaState.split('(')[0].trim()}</Tag>}
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+function Tag({children}){return<span style={{fontSize:10,background:'#F0F0F0',borderRadius:20,padding:'3px 8px',color:'#555'}}>{children}</span>;}
+
+function TripForm({trip,onSave,onCancel}){
+  const today=new Date().toISOString().slice(0,10);
+  const[f,setF]=useState(trip||{date:today,departTime:'',returnTime:'',route:'',engineStart:'',engineEnd:'',crew:[],windForce:'',seaState:'',weather:'',checkDep:{},checkRet:{},notes:''});
+  const[ck,setCk]=useState('dep');
+  const set=(k,v)=>setF(p=>({...p,[k]:v}));
+  const toggleCrew=m=>set('crew',f.crew.includes(m)?f.crew.filter(x=>x!==m):[...f.crew,m]);
+  const toggleCheck=(type,item)=>{const k=type==='dep'?'checkDep':'checkRet';set(k,{...f[k],[item]:!f[k][item]});};
+  const dur=f.engineStart&&f.engineEnd&&parseFloat(f.engineEnd)>parseFloat(f.engineStart)?(parseFloat(f.engineEnd)-parseFloat(f.engineStart)).toFixed(1):null;
+
+  return(
+    <div style={{padding:16}}>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
+        <button onClick={onCancel} style={{background:'none',border:'1px solid #D0D0D0',borderRadius:8,padding:'6px 12px',cursor:'pointer',fontSize:13}}>← Retour</button>
+        <div style={{fontSize:16,fontWeight:700}}>{trip?'Modifier':'Nouvelle sortie'}</div>
+      </div>
+      <Sec label="INFORMATIONS GÉNÉRALES">
+        <Fld label="Date"><input type="date" value={f.date} onChange={e=>set('date',e.target.value)} style={inp}/></Fld>
+        <Fld label="Parcours"><input type="text" value={f.route} onChange={e=>set('route',e.target.value)} placeholder="Carro → Carry → Niolon" style={inp}/></Fld>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          <Fld label="Départ"><input type="time" value={f.departTime} onChange={e=>set('departTime',e.target.value)} style={inp}/></Fld>
+          <Fld label="Retour"><input type="time" value={f.returnTime} onChange={e=>set('returnTime',e.target.value)} style={inp}/></Fld>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          <Fld label="Horomètre départ"><input type="number" step="0.1" value={f.engineStart} onChange={e=>set('engineStart',e.target.value)} placeholder="342.5" style={inp}/></Fld>
+          <Fld label="Horomètre retour"><input type="number" step="0.1" value={f.engineEnd} onChange={e=>set('engineEnd',e.target.value)} placeholder="345.2" style={inp}/></Fld>
+        </div>
+        {dur&&<div style={{background:'#D6F5EA',color:'#0A5C3E',borderRadius:8,padding:'8px 12px',fontSize:12,fontWeight:600}}>⏱ Durée moteur : {dur} heures</div>}
+      </Sec>
+      <Sec label="ÉQUIPAGE">
+        <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+          {CREW.map(m=>(
+            <button key={m} onClick={()=>toggleCrew(m)} style={{padding:'7px 14px',borderRadius:20,border:`1.5px solid ${f.crew.includes(m)?'#0B2845':'#D0D0D0'}`,background:f.crew.includes(m)?'#0B2845':'transparent',color:f.crew.includes(m)?'white':'#555',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit'}}>{m}</button>
+          ))}
+        </div>
+      </Sec>
+      <Sec label="CONDITIONS MÉTÉO">
+        <Fld label="Vent"><select value={f.windForce} onChange={e=>set('windForce',e.target.value)} style={inp}><option value="">— Sélectionner —</option>{WIND.map(w=><option key={w} value={w}>{w}</option>)}</select></Fld>
+        <Fld label="Mer"><select value={f.seaState} onChange={e=>set('seaState',e.target.value)} style={inp}><option value="">— Sélectionner —</option>{SEA.map(s=><option key={s} value={s}>{s}</option>)}</select></Fld>
+        <Fld label="Observations"><input type="text" value={f.weather} onChange={e=>set('weather',e.target.value)} placeholder="Mistral 20 nœuds, bonne visibilité…" style={inp}/></Fld>
+      </Sec>
+      <Sec label="CHECKLISTS">
+        <div style={{display:'flex',gap:8,marginBottom:12}}>
+          {[['dep','Départ',CHECK_DEP],['ret','Retour',CHECK_RET]].map(([id,lbl,list])=>{
+            const count=list.filter(i=>(id==='dep'?f.checkDep:f.checkRet)[i]).length;
+            return<button key={id} onClick={()=>setCk(id)} style={{flex:1,padding:10,borderRadius:10,border:'none',background:ck===id?'#0B2845':'#EBEBEB',color:ck===id?'white':'#555',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>{lbl} ({count}/{list.length})</button>;
+          })}
+        </div>
+        {(ck==='dep'?CHECK_DEP:CHECK_RET).map(item=>{
+          const checked=(ck==='dep'?f.checkDep:f.checkRet)[item];
+          return(
+            <div key={item} onClick={()=>toggleCheck(ck,item)} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 0',borderBottom:'1px solid #F0F0F0',cursor:'pointer'}}>
+              <div style={{width:22,height:22,borderRadius:6,border:`2px solid ${checked?'#0B2845':'#C0C0C0'}`,background:checked?'#0B2845':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                {checked&&<span style={{color:'white',fontSize:13,fontWeight:700}}>✓</span>}
+              </div>
+              <span style={{fontSize:13,color:'#333',fontWeight:checked?600:400}}>{item}</span>
+            </div>
+          );
+        })}
+      </Sec>
+      <Sec label="NOTES">
+        <textarea value={f.notes} onChange={e=>set('notes',e.target.value)} placeholder="Observations, incidents, moments mémorables…" style={{...inp,minHeight:80,resize:'vertical'}}/>
+      </Sec>
+      <button onClick={()=>onSave(f)} style={{...btn(),width:'100%',padding:14,fontSize:14,borderRadius:12,marginTop:4}}>
+        ✓ {trip?'Enregistrer les modifications':'Enregistrer la sortie'}
+      </button>
+    </div>
+  );
+}
+
+function TripDetail({trip,onBack,onEdit,onDelete}){
+  const dur=trip.engineStart&&trip.engineEnd?Math.max(0,(parseFloat(trip.engineEnd)-parseFloat(trip.engineStart))).toFixed(1):null;
+  const depOk=CHECK_DEP.filter(i=>trip.checkDep?.[i]).length;
+  const retOk=CHECK_RET.filter(i=>trip.checkRet?.[i]).length;
+  return(
+    <div style={{padding:16}}>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:20}}>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <button onClick={onBack} style={{background:'none',border:'1px solid #D0D0D0',borderRadius:8,padding:'6px 12px',cursor:'pointer',fontSize:13}}>← Retour</button>
+          <div>
+            <div style={{fontSize:16,fontWeight:700}}>{trip.route||'Sortie'}</div>
+            <div style={{fontSize:12,color:'#888'}}>{new Date(trip.date).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
+          </div>
+        </div>
+        <div style={{display:'flex',gap:6}}>
+          <button onClick={onEdit} style={btn('#E8F0FF','#1A3A8F')}>Modifier</button>
+          <button onClick={onDelete} style={btn('#FFEBEE','#C62828')}>Suppr.</button>
+        </div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
+        {trip.departTime&&<Mini icon="🕐" label="Départ" val={trip.departTime}/>}
+        {trip.returnTime&&<Mini icon="🏁" label="Retour" val={trip.returnTime}/>}
+        {dur&&<Mini icon="⏱️" label="Moteur" val={`${dur}h`}/>}
+        {trip.crew?.length>0&&<Mini icon="👥" label="Équipage" val={`${trip.crew.length} pers.`}/>}
+      </div>
+      {trip.crew?.length>0&&<Bloc label="ÉQUIPAGE"><p style={{margin:0,fontSize:13}}>{trip.crew.join(' · ')}</p></Bloc>}
+      {(trip.windForce||trip.seaState||trip.weather)&&<Bloc label="MÉTÉO">
+        {trip.windForce&&<p style={{margin:'0 0 4px',fontSize:13}}>💨 {trip.windForce}</p>}
+        {trip.seaState&&<p style={{margin:'0 0 4px',fontSize:13}}>🌊 {trip.seaState}</p>}
+        {trip.weather&&<p style={{margin:0,fontSize:13,color:'#555'}}>{trip.weather}</p>}
+      </Bloc>}
+      {(depOk||retOk)&&<Bloc label="CHECKLISTS"><div style={{display:'flex',gap:16,fontSize:13}}><div>✅ Départ : <strong>{depOk}/{CHECK_DEP.length}</strong></div><div>✅ Retour : <strong>{retOk}/{CHECK_RET.length}</strong></div></div></Bloc>}
+      {trip.notes&&<Bloc label="NOTES"><p style={{margin:0,fontSize:13,lineHeight:1.7,color:'#555'}}>{trip.notes}</p></Bloc>}
+    </div>
+  );
+}
+
+function Mini({icon,label,val}){return<div style={{background:'white',borderRadius:10,padding:'10px 12px',border:'1px solid #E8E8E8'}}><div style={{fontSize:18}}>{icon}</div><div style={{fontSize:10,color:'#888',marginTop:3}}>{label}</div><div style={{fontSize:14,fontWeight:700,marginTop:1}}>{val}</div></div>;}
+function Bloc({label,children}){return<div style={{marginBottom:14}}><div style={{fontSize:10,fontWeight:700,color:'#888',letterSpacing:'.1em',marginBottom:6}}>{label}</div><div style={{background:'white',borderRadius:10,padding:'12px 14px',border:'1px solid #E8E8E8'}}>{children}</div></div>;}
+
+// ── Expenses ──────────────────────────────────────────────────────────────────
+function ExpensesTab({expenses,upsertExpense,deleteExpense,view,setView,editItem,setEditItem,totalExp}){
+  if(view==='form')return<ExpenseForm expense={editItem} onSave={async e=>{await upsertExpense({...e,id:e.id||uid()});setView('list');setEditItem(null);}} onCancel={()=>{setView('list');setEditItem(null);}}/>;
+  const byCat=CATS.map(c=>({...c,total:expenses.filter(e=>e.category===c.id).reduce((s,e)=>s+(parseFloat(e.amount)||0),0)})).filter(c=>c.total>0);
+
+  return(
+    <div style={{padding:16}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div style={{fontSize:16,fontWeight:700}}>Dépenses</div>
+        <button onClick={()=>{setEditItem(null);setView('form');}} style={btn()}>+ Ajouter</button>
+      </div>
+      <div style={{background:'#0B2845',borderRadius:14,padding:'16px 18px',marginBottom:16,color:'white'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end'}}>
+          <div><div style={{fontSize:11,opacity:.7,marginBottom:2}}>TOTAL GÉNÉRAL</div><div style={{fontSize:30,fontWeight:700}}>{totalExp.toFixed(2)} €</div></div>
+          <div style={{textAlign:'right'}}><div style={{fontSize:11,opacity:.7,marginBottom:2}}>PART STÉPHANE</div><div style={{fontSize:20,fontWeight:700}}>{(totalExp/2).toFixed(2)} €</div><div style={{fontSize:10,opacity:.6}}>50/50 avec Olivier</div></div>
+        </div>
+      </div>
+      {byCat.length>0&&<>
+        <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>PAR CATÉGORIE</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:16}}>
+          {byCat.map(c=><div key={c.id} style={{background:c.bg,borderRadius:10,padding:10}}><div style={{fontSize:20}}>{c.icon}</div><div style={{fontSize:10,color:c.fg,marginTop:4}}>{c.label}</div><div style={{fontSize:16,fontWeight:700,color:c.fg}}>{c.total.toFixed(0)}€</div></div>)}
+        </div>
+      </>}
+      <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>HISTORIQUE</div>
+      {!expenses.length?(
+        <div style={{textAlign:'center',padding:40,color:'#888'}}><div style={{fontSize:40,marginBottom:8}}>💶</div><div style={{fontSize:13}}>Aucune dépense</div></div>
+      ):(
+        <div style={{background:'white',borderRadius:12,border:'1px solid #E8E8E8',overflow:'hidden'}}>
+          {[...expenses].reverse().map((exp,i,arr)=>{
+            const cat=CATS.find(c=>c.id===exp.category)||CATS[5];
+            const who=exp.paidBy==='stephane'?'Stéphane':exp.paidBy==='olivier'?'Olivier':exp.paidBy==='lubin'?'Lubin':'Commun';
+            return(
+              <div key={exp.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderBottom:i<arr.length-1?'1px solid #F5F5F5':'none'}}>
+                <span style={{fontSize:22}}>{cat.icon}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{exp.description||cat.label}</div>
+                  <div style={{fontSize:11,color:'#888'}}>{new Date(exp.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})} · {who}</div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{fontSize:15,fontWeight:700}}>{parseFloat(exp.amount).toFixed(2)}€</div>
+                  <button onClick={()=>deleteExpense(exp.id)} style={{background:'#FFEBEE',border:'none',borderRadius:6,padding:'4px 8px',cursor:'pointer',fontSize:11,color:'#C62828'}}>✕</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExpenseForm({expense,onSave,onCancel}){
+  const today=new Date().toISOString().slice(0,10);
+  const[f,setF]=useState(expense||{date:today,category:'fuel',amount:'',description:'',paidBy:'commun'});
+  const set=(k,v)=>setF(p=>({...p,[k]:v}));
+
+  return(
+    <div style={{padding:16}}>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
+        <button onClick={onCancel} style={{background:'none',border:'1px solid #D0D0D0',borderRadius:8,padding:'6px 12px',cursor:'pointer',fontSize:13}}>← Retour</button>
+        <div style={{fontSize:16,fontWeight:700}}>Nouvelle dépense</div>
+      </div>
+      <Sec label="CATÉGORIE">
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+          {CATS.map(c=><button key={c.id} onClick={()=>set('category',c.id)} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4,padding:'12px 6px',borderRadius:10,border:`2px solid ${f.category===c.id?c.fg:'#E0E0E0'}`,background:f.category===c.id?c.bg:'transparent',cursor:'pointer',fontFamily:'inherit'}}><span style={{fontSize:22}}>{c.icon}</span><span style={{fontSize:10,fontWeight:600,color:f.category===c.id?c.fg:'#888'}}>{c.label}</span></button>)}
+        </div>
+      </Sec>
+      <Sec label="DÉTAILS">
+        <Fld label="Montant (€)"><input type="number" step="0.01" value={f.amount} onChange={e=>set('amount',e.target.value)} placeholder="0.00" style={{...inp,fontSize:24,fontWeight:700,padding:'12px 14px'}}/></Fld>
+        <Fld label="Date"><input type="date" value={f.date} onChange={e=>set('date',e.target.value)} style={inp}/></Fld>
+        <Fld label="Description"><input type="text" value={f.description} onChange={e=>set('description',e.target.value)} placeholder="Plein de gazole, vidange 300h…" style={inp}/></Fld>
+      </Sec>
+      <Sec label="PAYÉ PAR">
+        <div style={{display:'flex',gap:8}}>
+          {[['commun','Commun'],['stephane','Stéphane'],['olivier','Olivier'],['lubin','Lubin']].map(([v,l])=>(
+            <button key={v} onClick={()=>set('paidBy',v)} style={{flex:1,padding:'9px 4px',borderRadius:10,border:`2px solid ${f.paidBy===v?'#0B2845':'#E0E0E0'}`,background:f.paidBy===v?'#0B2845':'transparent',color:f.paidBy===v?'white':'#555',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>{l}</button>
+          ))}
+        </div>
+      </Sec>
+      <button onClick={()=>onSave(f)} disabled={!f.amount} style={{...btn(f.amount?'#0B2845':'#CCC',f.amount?'white':'#999'),width:'100%',padding:14,fontSize:14,borderRadius:12,marginTop:4,cursor:f.amount?'pointer':'default'}}>
+        ✓ Enregistrer la dépense
+      </button>
+    </div>
+  );
+}
+
+// ── Admin ─────────────────────────────────────────────────────────────────────
+function AdminTab(){
+  const[moTab,setMoTab]=useState(false);
+  return(
+    <div style={{padding:16}}>
+      <div style={{fontSize:16,fontWeight:700,marginBottom:16}}>Administratif</div>
+      <div style={{background:'linear-gradient(135deg,#0B2845,#1A4A7A)',borderRadius:14,padding:'14px 16px',marginBottom:16,color:'white'}}>
+        <div style={{fontSize:10,opacity:.7,letterSpacing:'.1em',marginBottom:4}}>ZONE DE NAVIGATION</div>
+        <div style={{fontSize:15,fontWeight:700}}>Côte Bleue · Marseille · Calanques</div>
+        <div style={{fontSize:12,opacity:.8,marginTop:3}}>Jusqu'à Toulon · Porquerolles · Météo : Zone Lion</div>
+      </div>
+      <div style={{display:'flex',gap:8,marginBottom:16}}>
+        <button onClick={()=>setMoTab(false)} style={{flex:1,padding:9,borderRadius:10,border:'none',background:!moTab?'#0B2845':'#EBEBEB',color:!moTab?'white':'#555',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>🚢 Fiche bateau</button>
+        <button onClick={()=>setMoTab(true)} style={{flex:1,padding:9,borderRadius:10,border:'none',background:moTab?'#0B2845':'#EBEBEB',color:moTab?'white':'#555',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>⚓ Mouillages</button>
+      </div>
+      {!moTab?<>
+        <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>FICHE TECHNIQUE</div>
+        <div style={{background:'white',borderRadius:12,border:'1px solid #E8E8E8',overflow:'hidden',marginBottom:20}}>
+          {BOAT_SPECS.map(([k,v],i)=>(
+            <div key={k} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 14px',background:i%2===0?'white':'#FAFAFA',borderBottom:i<BOAT_SPECS.length-1?'1px solid #F0F0F0':'none',fontSize:13}}>
+              <span style={{color:'#888'}}>{k}</span><span style={{fontWeight:600}}>{v}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>DOCUMENTS DU BORD</div>
+        <div style={{background:'white',borderRadius:12,border:'1px solid #E8E8E8',overflow:'hidden'}}>
+          {DOCS.map((d,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderBottom:i<DOCS.length-1?'1px solid #F5F5F5':'none'}}>
+              <span style={{fontSize:22}}>{d.icon}</span>
+              <div style={{flex:1,fontSize:13,fontWeight:500}}>{d.name}</div>
+              <div style={{width:9,height:9,borderRadius:'50%',background:'#2E7D32'}}/>
+            </div>
+          ))}
+        </div>
+      </>:<>
+        <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>CÔTE BLEUE · MARSEILLE · CALANQUES · PORQUEROLLES</div>
+        {MOUILLAGES.map((m,i)=>(
+          <div key={i} style={{background:'white',borderRadius:12,border:'1px solid #E8E8E8',padding:'12px 14px',marginBottom:8}}>
+            <div style={{display:'flex',gap:10,alignItems:'center',marginBottom:6}}>
+              <span style={{fontSize:22}}>{m.icon}</span>
+              <div><div style={{fontSize:13,fontWeight:700}}>{m.name}</div><div style={{fontSize:10,color:'#1565C0',fontWeight:600}}>{m.dist}</div></div>
+            </div>
+            <div style={{fontSize:12,color:'#666',lineHeight:1.6}}>{m.note}</div>
+          </div>
+        ))}
+      </>}
+    </div>
+  );
+}
+
+// ── Emergency ─────────────────────────────────────────────────────────────────
+function EmergencyTab(){
+  return(
+    <div style={{padding:16}}>
+      <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Urgences</div>
+      <div style={{fontSize:12,color:'#888',marginBottom:12}}>Zone : Côte Bleue · Marseille · Toulon · Porquerolles</div>
+      <div style={{background:'#C62828',borderRadius:12,padding:'14px 16px',marginBottom:16,color:'white',display:'flex',gap:14,alignItems:'center'}}>
+        <span style={{fontSize:36}}>🚨</span>
+        <div><div style={{fontSize:14,fontWeight:700}}>DÉTRESSE EN MER</div><div style={{fontSize:12,marginTop:4,opacity:.9}}>Appelez le <strong>196</strong> ou MAYDAY canal 16 VHF</div></div>
+      </div>
+      {EMERGENCY.map((c,i)=>(
+        <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:'white',border:'1px solid #E8E8E8',borderRadius:12,marginBottom:8}}>
+          <span style={{fontSize:24,flexShrink:0}}>{c.icon}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12,fontWeight:700}}>{c.name}</div>
+            {c.note&&<div style={{fontSize:10,color:'#999'}}>{c.note}</div>}
+            {c.num?<a href={`tel:${c.num.replace(/\s/g,'')}`} style={{fontSize:17,fontWeight:700,color:c.color,textDecoration:'none'}}>{c.num}</a>:<div style={{fontSize:12,color:'#AAA',fontStyle:'italic'}}>À renseigner</div>}
+          </div>
+          {c.num&&<a href={`tel:${c.num.replace(/\s/g,'')}`} style={{width:42,height:42,borderRadius:21,background:c.bg,display:'flex',alignItems:'center',justifyContent:'center',textDecoration:'none',fontSize:20,flexShrink:0}}>☎</a>}
+        </div>
+      ))}
+      <div style={{background:'#E0F2F1',borderRadius:12,padding:'12px 14px',marginTop:4,fontSize:12,color:'#00695C',lineHeight:1.7}}>
+        <strong>Canal 16 VHF</strong> — Veille obligatoire en mer<br/>
+        <strong>Météo Lion</strong> — Bulletins VHF à 0633, 1133, 1633, 2133
+      </div>
+    </div>
+  );
+}
+
+// ── Shared ─────────────────────────────────────────────────────────────────────
+function Sec({label,children}){return<div style={{marginBottom:20}}><div style={{fontSize:10,fontWeight:700,color:'#888',letterSpacing:'.1em',marginBottom:10}}>{label}</div><div style={{display:'flex',flexDirection:'column',gap:10}}>{children}</div></div>;}
+function Fld({label,children}){return<div><div style={{fontSize:12,color:'#666',marginBottom:4,fontWeight:500}}>{label}</div>{children}</div>;}
+
+// ── Render ──────────────────────────────────────────────────────────────────────
+const root=ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+</body>
+</html>

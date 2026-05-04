@@ -1,0 +1,13 @@
+{
+  "name": "Leader 805 — Carnet de Bord",
+  "short_name": "Leader 805",
+  "description": "Carnet de bord familial Jeanneau Leader 805 — Côte Bleue",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B2845",
+  "theme_color": "#0B2845",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
