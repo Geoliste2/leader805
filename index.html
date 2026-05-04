@@ -548,9 +548,19 @@ function ExpensesTab({expenses,upsertExpense,deleteExpense,view,setView,editItem
         <button onClick={()=>{setEditItem(null);setView('form');}} style={btn()}>+ Ajouter</button>
       </div>
       <div style={{background:'#0B2845',borderRadius:14,padding:'16px 18px',marginBottom:16,color:'white'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end'}}>
-          <div><div style={{fontSize:11,opacity:.7,marginBottom:2}}>TOTAL RÉGLÉ</div><div style={{fontSize:30,fontWeight:700}}>{totalExp.toFixed(2)} €</div></div>
-          <div style={{textAlign:'right'}}><div style={{fontSize:11,opacity:.7,marginBottom:2}}>PART STÉPHANE</div><div style={{fontSize:20,fontWeight:700}}>{(totalExp/2).toFixed(2)} €</div><div style={{fontSize:10,opacity:.6}}>50/50 avec Olivier</div></div>
+        <div style={{fontSize:11,opacity:.7,marginBottom:10,letterSpacing:'.08em'}}>TOTAL RÉGLÉ</div>
+        <div style={{fontSize:32,fontWeight:700,marginBottom:14}}>{totalExp.toFixed(2)} €</div>
+        <div style={{display:'flex',gap:0,borderTop:'1px solid rgba(255,255,255,.15)',paddingTop:12}}>
+          {[
+            {label:'Stéphane',amount:expenses.filter(e=>e.paidBy==='stephane').reduce((s,e)=>s+(parseFloat(e.amount)||0),0)},
+            {label:'Olivier', amount:expenses.filter(e=>e.paidBy==='olivier').reduce((s,e)=>s+(parseFloat(e.amount)||0),0)},
+            {label:'Commun',  amount:expenses.filter(e=>e.paidBy==='commun'||!e.paidBy).reduce((s,e)=>s+(parseFloat(e.amount)||0),0)},
+          ].map((p,i,arr)=>(
+            <div key={p.label} style={{flex:1,paddingRight:i<arr.length-1?12:0,borderRight:i<arr.length-1?'1px solid rgba(255,255,255,.15)':'none',paddingLeft:i>0?12:0}}>
+              <div style={{fontSize:10,opacity:.6,marginBottom:3}}>{p.label.toUpperCase()}</div>
+              <div style={{fontSize:18,fontWeight:700}}>{p.amount.toFixed(2)}€</div>
+            </div>
+          ))}
         </div>
       </div>
       {byCat.length>0&&<>
