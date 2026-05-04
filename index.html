@@ -868,7 +868,9 @@ function ExpenseForm({expense,onSave,onCancel,boatCode}){
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 const SPECS_KEY='leader805_specs';
+const MOUILLAGES_KEY='leader805_mouillages';
 const DEFAULT_SPECS=Object.fromEntries(BOAT_SPECS.map(([k,v])=>[k,v]));
+const DEFAULT_MOUILLAGES=MOUILLAGES.map((m,i)=>({...m,id:'m'+i,phone:''}));
 
 function AdminTab({docs,upsertDoc,deleteDoc}){
   const[subTab,setSubTab]=useState('docs');
@@ -878,43 +880,51 @@ function AdminTab({docs,upsertDoc,deleteDoc}){
   const[specValues,setSpecValues]=useState(()=>{
     try{const s=localStorage.getItem(SPECS_KEY);return s?JSON.parse(s):DEFAULT_SPECS;}catch{return DEFAULT_SPECS;}
   });
+  const[mouillages,setMouillages]=useState(()=>{
+    try{const s=localStorage.getItem(MOUILLAGES_KEY);return s?JSON.parse(s):DEFAULT_MOUILLAGES;}catch{return DEFAULT_MOUILLAGES;}
+  });
+  const[mouilForm,setMouilForm]=useState(null); // null=list, {}=new, {...}=edit
+  const[mouilUploading,setMouilUploading]=useState(false);
 
-  const saveSpecs=()=>{
-    localStorage.setItem(SPECS_KEY,JSON.stringify(specValues));
-    setEditingSpecs(false);
-  };
-  const cancelSpecs=()=>{
-    try{const s=localStorage.getItem(SPECS_KEY);setSpecValues(s?JSON.parse(s):DEFAULT_SPECS);}catch{setSpecValues(DEFAULT_SPECS);}
-    setEditingSpecs(false);
-  };
-
-  const PREDEFINED=[
-    {id:'permis_stephane', name:'Permis côtier — Stéphane', icon:'🪪'},
-    {id:'permis_olivier',  name:'Permis côtier — Olivier',  icon:'🪪'},
-    {id:'assurance',       name:'Assurance bateau',         icon:'🛡️'},
-    {id:'francisation',    name:'Acte de francisation',     icon:'📄'},
-    {id:'immatriculation', name:"Certificat d'immatriculation", icon:'🧾'},
-    {id:'vhf',             name:'Licence VHF',              icon:'📻'},
-    {id:'ce',              name:'Certificat CE',            icon:'🔎'},
-    {id:'carte',           name:'Carte de navigation',      icon:'🗺️'},
-  ];
+  const saveMouillages=list=>{setMouillages(list);localStorage.setItem(MOUILLAGES_KEY,JSON.stringify(list));};
+  const saveSpecs=()=>{localStorage.setItem(SPECS_KEY,JSON.stringify(specValues));setEditingSpecs(false);};
+  const cancelSpecs=()=>{try{const s=localStorage.getItem(SPECS_KEY);setSpecValues(s?JSON.parse(s):DEFAULT_SPECS);}catch{setSpecValues(DEFAULT_SPECS);}setEditingSpecs(false);};
 
   const handleFile=async(predoc,file,side)=>{
     if(!file)return;
     setUploading(predoc.id+side);
     const photo=await compressImage(file);
     const saved=docs.find(d=>d.id===predoc.id)||{};
-    await upsertDoc({id:predoc.id,name:predoc.name,icon:predoc.icon,...saved,
-      [side==='recto'?'photoRecto':'photoVerso']:photo});
+    const field=side==='recto'?'photo_recto':'photo_verso';
+    await upsertDoc({id:predoc.id,name:predoc.name,icon:predoc.icon,...saved,[field]:photo});
     setUploading(null);
   };
 
+  const handleMouilPhoto=async(file)=>{
+    if(!file)return;
+    setMouilUploading(true);
+    const photo=await compressImage(file);
+    setMouilForm(p=>({...p,photo}));
+    setMouilUploading(false);
+  };
+
+  const saveMouil=()=>{
+    if(!mouilForm.name?.trim())return;
+    if(mouilForm.id&&mouillages.find(m=>m.id===mouilForm.id)){
+      saveMouillages(mouillages.map(m=>m.id===mouilForm.id?mouilForm:m));
+    }else{
+      saveMouillages([...mouillages,{...mouilForm,id:'m'+Date.now()}]);
+    }
+    setMouilForm(null);
+  };
+
   const SubBtn=({id,label})=>(
-    <button onClick={()=>setSubTab(id)} style={{flex:1,padding:9,borderRadius:10,border:'none',background:subTab===id?'#0B2845':'#EBEBEB',color:subTab===id?'white':'#555',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>{label}</button>
+    <button onClick={()=>setSubTab(id)} style={{flex:1,padding:9,borderRadius:10,border:'none',background:subTab===id?'#0B2845':'#EBEBEB',color:subTab===id?'white':'#555',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>{label}</button>
   );
 
   const PhotoSlot=({saved,predoc,side,label})=>{
-    const photo=saved?.[side==='recto'?'photoRecto':'photoVerso'];
+    const field=side==='recto'?'photo_recto':'photo_verso';
+    const photo=saved?.[field];
     const isUp=uploading===predoc.id+side;
     return(
       <div style={{flex:1,background:'#F8F8F8',borderRadius:10,padding:10,border:'1px solid #EEE'}}>
@@ -939,6 +949,56 @@ function AdminTab({docs,upsertDoc,deleteDoc}){
     );
   };
 
+  // ── Mouillage form ────────────────────────────────────────────────────────
+  if(mouilForm!==null)return(
+    <div style={{padding:16}}>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
+        <button onClick={()=>setMouilForm(null)} style={{background:'none',border:'1px solid #D0D0D0',borderRadius:8,padding:'6px 12px',cursor:'pointer',fontSize:13}}>← Retour</button>
+        <div style={{fontSize:16,fontWeight:700}}>{mouilForm.id&&mouillages.find(m=>m.id===mouilForm.id)?'Modifier':'Nouveau mouillage'}</div>
+      </div>
+      <Sec label="INFORMATIONS">
+        <Fld label="Nom du mouillage">
+          <input type="text" value={mouilForm.name||''} onChange={e=>setMouilForm(p=>({...p,name:e.target.value}))} placeholder="Calanque de Niolon" style={inp}/>
+        </Fld>
+        <div style={{display:'grid',gridTemplateColumns:'80px 1fr',gap:10}}>
+          <Fld label="Icône">
+            <input type="text" value={mouilForm.icon||''} onChange={e=>setMouilForm(p=>({...p,icon:e.target.value}))} placeholder="🏖️" style={{...inp,fontSize:24,textAlign:'center'}}/>
+          </Fld>
+          <Fld label="Zone / Distance">
+            <input type="text" value={mouilForm.dist||''} onChange={e=>setMouilForm(p=>({...p,dist:e.target.value}))} placeholder="~8 mn de Carro" style={inp}/>
+          </Fld>
+        </div>
+        <Fld label="Téléphone (port / capitainerie)">
+          <input type="tel" value={mouilForm.phone||''} onChange={e=>setMouilForm(p=>({...p,phone:e.target.value}))} placeholder="04 42 ..." style={inp}/>
+        </Fld>
+        <Fld label="Notes (fond, accès, conseils)">
+          <textarea value={mouilForm.note||''} onChange={e=>setMouilForm(p=>({...p,note:e.target.value}))} placeholder="Fond sable, bonne tenue. Arriver tôt en été." style={{...inp,minHeight:80,resize:'vertical'}}/>
+        </Fld>
+      </Sec>
+      <Sec label="PHOTO DU MOUILLAGE">
+        {mouilForm.photo?(
+          <div>
+            <img src={mouilForm.photo} style={{width:'100%',height:160,objectFit:'cover',borderRadius:10,marginBottom:8}} alt="mouillage"/>
+            <label style={{cursor:'pointer',display:'block',textAlign:'center'}}>
+              <input type="file" accept="image/*" style={{display:'none'}} onChange={e=>handleMouilPhoto(e.target.files[0])} disabled={mouilUploading}/>
+              <div style={{fontSize:12,color:'#1565C0',fontWeight:600}}>{mouilUploading?'⏳ Compression…':'📷 Changer la photo'}</div>
+            </label>
+          </div>
+        ):(
+          <label style={{cursor:'pointer',display:'block'}}>
+            <input type="file" accept="image/*" style={{display:'none'}} onChange={e=>handleMouilPhoto(e.target.files[0])} disabled={mouilUploading}/>
+            <div style={{height:120,border:'1.5px dashed #C0C0C0',borderRadius:10,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,background:'#F8F8F8'}}>
+              {mouilUploading?<span style={{fontSize:13,color:'#888'}}>⏳ Compression…</span>:<><span style={{fontSize:36}}>📷</span><span style={{fontSize:12,color:'#999'}}>Ajouter une photo</span></>}
+            </div>
+          </label>
+        )}
+      </Sec>
+      <button onClick={saveMouil} disabled={!mouilForm.name?.trim()} style={{...btn(mouilForm.name?.trim()?'#0B2845':'#CCC','white'),width:'100%',padding:14,fontSize:14,borderRadius:12,marginTop:4}}>
+        ✓ Enregistrer le mouillage
+      </button>
+    </div>
+  );
+
   return(
     <div style={{padding:16}}>
       <div style={{fontSize:16,fontWeight:700,marginBottom:16}}>Administratif</div>
@@ -947,20 +1007,29 @@ function AdminTab({docs,upsertDoc,deleteDoc}){
         <div style={{fontSize:15,fontWeight:700}}>Côte Bleue · Marseille · Calanques</div>
         <div style={{fontSize:12,opacity:.8,marginTop:3}}>Jusqu'à Toulon · Porquerolles · Météo : Zone Lion</div>
       </div>
-
-      <div style={{display:'flex',gap:8,marginBottom:16}}>
-        <SubBtn id="docs" label="📸 Documents"/>
+      <div style={{display:'flex',gap:6,marginBottom:16}}>
+        <SubBtn id="docs" label="📸 Docs"/>
         <SubBtn id="specs" label="🚢 Fiche"/>
         <SubBtn id="mouillages" label="⚓ Mouillages"/>
       </div>
 
+      {/* DOCUMENTS */}
       {subTab==='docs'&&(
         <>
           <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:4}}>DOCUMENTS DU BORD</div>
-          <div style={{fontSize:11,color:'#999',marginBottom:12}}>Recto et verso pour chaque document — appuyez pour agrandir</div>
-          {PREDEFINED.map(predoc=>{
+          <div style={{fontSize:11,color:'#999',marginBottom:12}}>Recto et verso — appuyez sur une photo pour agrandir</div>
+          {[
+            {id:'permis_stephane', name:'Permis côtier — Stéphane', icon:'🪪'},
+            {id:'permis_olivier',  name:'Permis côtier — Olivier',  icon:'🪪'},
+            {id:'assurance',       name:'Assurance bateau',         icon:'🛡️'},
+            {id:'francisation',    name:'Acte de francisation',     icon:'📄'},
+            {id:'immatriculation', name:"Certificat d'immatriculation", icon:'🧾'},
+            {id:'vhf',             name:'Licence VHF',              icon:'📻'},
+            {id:'ce',              name:'Certificat CE',            icon:'🔎'},
+            {id:'carte',           name:'Carte de navigation',      icon:'🗺️'},
+          ].map(predoc=>{
             const saved=docs.find(d=>d.id===predoc.id);
-            const hasAny=saved?.photoRecto||saved?.photoVerso;
+            const hasAny=saved?.photo_recto||saved?.photo_verso;
             return(
               <div key={predoc.id} style={{background:'white',borderRadius:12,border:'1px solid #E8E8E8',marginBottom:10,overflow:'hidden'}}>
                 <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px 8px'}}>
@@ -968,10 +1037,10 @@ function AdminTab({docs,upsertDoc,deleteDoc}){
                   <div style={{flex:1}}>
                     <div style={{fontSize:13,fontWeight:600}}>{predoc.name}</div>
                     <div style={{fontSize:11,color:hasAny?'#2E7D32':'#999',marginTop:2}}>
-                      {saved?.photoRecto&&saved?.photoVerso?'✅ Recto + Verso':saved?.photoRecto?'⚠️ Recto seulement':saved?.photoVerso?'⚠️ Verso seulement':'Aucune photo'}
+                      {saved?.photo_recto&&saved?.photo_verso?'✅ Recto + Verso':saved?.photo_recto?'⚠️ Recto seulement':saved?.photo_verso?'⚠️ Verso seulement':'Aucune photo'}
                     </div>
                   </div>
-                  {hasAny&&<button onClick={()=>deleteDoc(predoc.id)} style={{background:'#FFEBEE',border:'none',borderRadius:6,padding:'6px 10px',cursor:'pointer',fontSize:11,color:'#C62828'}}>✕ Tout suppr.</button>}
+                  {hasAny&&<button onClick={()=>deleteDoc(predoc.id)} style={{background:'#FFEBEE',border:'none',borderRadius:6,padding:'6px 10px',cursor:'pointer',fontSize:11,color:'#C62828'}}>✕ Suppr.</button>}
                 </div>
                 <div style={{display:'flex',gap:8,padding:'0 14px 12px'}}>
                   <PhotoSlot saved={saved} predoc={predoc} side="recto" label="RECTO"/>
@@ -983,6 +1052,7 @@ function AdminTab({docs,upsertDoc,deleteDoc}){
         </>
       )}
 
+      {/* FICHE TECHNIQUE */}
       {subTab==='specs'&&<>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
           <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em'}}>FICHE TECHNIQUE</div>
@@ -1008,23 +1078,45 @@ function AdminTab({docs,upsertDoc,deleteDoc}){
             </div>
           ))}
         </div>
-        {editingSpecs&&<div style={{fontSize:11,color:'#888',textAlign:'center',padding:'4px 0 8px'}}>Les modifications sont sauvegardées sur cet appareil</div>}
+        {editingSpecs&&<div style={{fontSize:11,color:'#888',textAlign:'center',padding:'4px 0 8px'}}>Sauvegardé sur cet appareil</div>}
       </>}
 
+      {/* MOUILLAGES */}
       {subTab==='mouillages'&&<>
-        <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>CÔTE BLEUE · MARSEILLE · CALANQUES · PORQUEROLLES</div>
-        {MOUILLAGES.map((m,i)=>(
-          <div key={i} style={{background:'white',borderRadius:12,border:'1px solid #E8E8E8',padding:'12px 14px',marginBottom:8}}>
-            <div style={{display:'flex',gap:10,alignItems:'center',marginBottom:6}}>
-              <span style={{fontSize:22}}>{m.icon}</span>
-              <div><div style={{fontSize:13,fontWeight:700}}>{m.name}</div><div style={{fontSize:10,color:'#1565C0',fontWeight:600}}>{m.dist}</div></div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em'}}>MOUILLAGES FAVORIS ({mouillages.length})</div>
+          <button onClick={()=>setMouilForm({name:'',icon:'🏖️',dist:'',note:'',phone:'',photo:''})} style={{...btn(),fontSize:12,padding:'7px 14px'}}>+ Ajouter</button>
+        </div>
+        {mouillages.map(m=>(
+          <div key={m.id} style={{background:'white',borderRadius:12,border:'1px solid #E8E8E8',marginBottom:10,overflow:'hidden'}}>
+            {m.photo&&<img src={m.photo} style={{width:'100%',height:120,objectFit:'cover',display:'block',cursor:'pointer'}} onClick={()=>setViewing({name:m.name,photo:m.photo})} alt={m.name}/>}
+            <div style={{padding:'12px 14px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                  <span style={{fontSize:22}}>{m.icon||'⚓'}</span>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700}}>{m.name}</div>
+                    {m.dist&&<div style={{fontSize:10,color:'#1565C0',fontWeight:600}}>{m.dist}</div>}
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:6}}>
+                  <button onClick={()=>setMouilForm(m)} style={{background:'#EBF0FF',border:'none',borderRadius:6,padding:'5px 8px',cursor:'pointer',fontSize:12,color:'#1A3A8F'}}>✏️</button>
+                  <button onClick={()=>saveMouillages(mouillages.filter(x=>x.id!==m.id))} style={{background:'#FFEBEE',border:'none',borderRadius:6,padding:'5px 8px',cursor:'pointer',fontSize:12,color:'#C62828'}}>✕</button>
+                </div>
+              </div>
+              {m.note&&<div style={{fontSize:12,color:'#666',lineHeight:1.6,marginBottom:m.phone?8:0}}>{m.note}</div>}
+              {m.phone&&(
+                <a href={`tel:${m.phone.replace(/\s/g,'')}`} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#0B2845',textDecoration:'none',fontWeight:600,marginTop:6,padding:'7px 10px',background:'#E8F0FF',borderRadius:8}}>
+                  <span>📞</span>{m.phone}
+                </a>
+              )}
             </div>
-            <div style={{fontSize:12,color:'#666',lineHeight:1.6}}>{m.note}</div>
           </div>
         ))}
+        {!mouillages.length&&<div style={{textAlign:'center',padding:40,color:'#888'}}><div style={{fontSize:36,marginBottom:8}}>⚓</div><div style={{fontSize:13}}>Aucun mouillage enregistré</div></div>}
       </>}
 
-      {/* Fullscreen photo viewer */}
+      {/* Fullscreen viewer */}
       {viewing&&(
         <div onClick={()=>setViewing(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.92)',zIndex:1000,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:20}}>
           <div style={{color:'white',fontSize:14,fontWeight:600,marginBottom:16,textAlign:'center'}}>{viewing.name}</div>
@@ -1035,6 +1127,7 @@ function AdminTab({docs,upsertDoc,deleteDoc}){
     </div>
   );
 }
+
 
 // ── Emergency ─────────────────────────────────────────────────────────────────
 function EmergencyTab(){
