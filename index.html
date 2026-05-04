@@ -676,7 +676,7 @@ function ExpenseForm({expense,onSave,onCancel,boatCode}){
         )}
         {f.paymentMode==='pourcentage'&&(
           <Fld label="Pourcentage réglé (%)">
-            <div style={{display:'flex',gap:8',alignItems:'center'}}>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
               <input type="number" step="1" min="1" max="100" value={f.paymentPercent} onChange={e=>handlePercent(e.target.value)} placeholder="ex: 30" style={{...inp,fontSize:18,fontWeight:700}}/>
               <div style={{fontSize:14,color:'#888',flexShrink:0}}>%</div>
             </div>
