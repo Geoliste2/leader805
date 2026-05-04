@@ -193,13 +193,16 @@ function App(){
     if(!code)return;
     setLoading(true);
     try{
-      const[{data:t},{data:e},{data:d}]=await Promise.all([
+      const[{data:t},{data:e}]=await Promise.all([
         db.from('trips').select('*').eq('boat_code',code).order('created_at',{ascending:true}),
         db.from('expenses').select('*').eq('boat_code',code).order('created_at',{ascending:true}),
-        db.from('documents').select('*').eq('boat_code',code),
       ]);
       if(t)setTrips(t.map(r=>({...r.data,id:r.id})));
       if(e)setExpenses(e.map(r=>({...r.data,id:r.id})));
+    }catch(err){console.error('trips/expenses load error',err);}
+    // Documents chargés séparément — table optionnelle
+    try{
+      const{data:d}=await db.from('documents').select('*').eq('boat_code',code);
       if(d)setDocs(d);
     }catch{}
     setLoading(false);
