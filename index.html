@@ -869,6 +869,7 @@ function ExpenseForm({expense,onSave,onCancel,boatCode}){
 // ── Admin ─────────────────────────────────────────────────────────────────────
 const SPECS_KEY='leader805_specs';
 const MOUILLAGES_KEY='leader805_mouillages';
+const DOCPHOTOS_KEY='leader805_doc_photos';
 const DEFAULT_SPECS=Object.fromEntries(BOAT_SPECS.map(([k,v])=>[k,v]));
 const DEFAULT_MOUILLAGES=MOUILLAGES.map((m,i)=>({...m,id:'m'+i,phone:''}));
 
@@ -877,6 +878,10 @@ function AdminTab({docs,upsertDoc,deleteDoc}){
   const[viewing,setViewing]=useState(null);
   const[uploading,setUploading]=useState(null);
   const[editingSpecs,setEditingSpecs]=useState(false);
+  // Photos stockées localement sur l'appareil (localStorage)
+  const[docPhotos,setDocPhotos]=useState(()=>{
+    try{return JSON.parse(localStorage.getItem(DOCPHOTOS_KEY)||'{}');}catch{return {};}
+  });
   const[specValues,setSpecValues]=useState(()=>{
     try{const s=localStorage.getItem(SPECS_KEY);return s?JSON.parse(s):DEFAULT_SPECS;}catch{return DEFAULT_SPECS;}
   });
@@ -894,10 +899,27 @@ function AdminTab({docs,upsertDoc,deleteDoc}){
     if(!file)return;
     setUploading(predoc.id+side);
     const photo=await compressImage(file);
-    const saved=docs.find(d=>d.id===predoc.id)||{};
     const field=side==='recto'?'photo_recto':'photo_verso';
-    await upsertDoc({id:predoc.id,name:predoc.name,icon:predoc.icon,...saved,[field]:photo});
+    // Sauvegarde locale immédiate (source de vérité)
+    const updated={...docPhotos,[predoc.id]:{...(docPhotos[predoc.id]||{}),[field]:photo}};
+    setDocPhotos(updated);
+    localStorage.setItem(DOCPHOTOS_KEY,JSON.stringify(updated));
+    // Tentative sync Supabase (optionnel — nécessite les colonnes SQL)
+    try{
+      const saved=docs.find(d=>d.id===predoc.id)||{};
+      await upsertDoc({id:predoc.id,name:predoc.name,icon:predoc.icon,...saved,[field]:photo});
+    }catch{}
     setUploading(null);
+  };
+
+  const handleDeleteDoc=(id)=>{
+    // Supprime photos locales
+    const updated={...docPhotos};
+    delete updated[id];
+    setDocPhotos(updated);
+    localStorage.setItem(DOCPHOTOS_KEY,JSON.stringify(updated));
+    // Supprime dans Supabase
+    deleteDoc(id);
   };
 
   const handleMouilPhoto=async(file)=>{
@@ -922,9 +944,9 @@ function AdminTab({docs,upsertDoc,deleteDoc}){
     <button onClick={()=>setSubTab(id)} style={{flex:1,padding:9,borderRadius:10,border:'none',background:subTab===id?'#0B2845':'#EBEBEB',color:subTab===id?'white':'#555',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>{label}</button>
   );
 
-  const PhotoSlot=({saved,predoc,side,label})=>{
+  const PhotoSlot=({predoc,side,label})=>{
     const field=side==='recto'?'photo_recto':'photo_verso';
-    const photo=saved?.[field];
+    const photo=docPhotos[predoc.id]?.[field];
     const isUp=uploading===predoc.id+side;
     return(
       <div style={{flex:1,background:'#F8F8F8',borderRadius:10,padding:10,border:'1px solid #EEE'}}>
@@ -1029,7 +1051,7 @@ function AdminTab({docs,upsertDoc,deleteDoc}){
             {id:'carte',           name:'Carte de navigation',      icon:'🗺️'},
           ].map(predoc=>{
             const saved=docs.find(d=>d.id===predoc.id);
-            const hasAny=saved?.photo_recto||saved?.photo_verso;
+            const hasAny=docPhotos[predoc.id]?.photo_recto||docPhotos[predoc.id]?.photo_verso;
             return(
               <div key={predoc.id} style={{background:'white',borderRadius:12,border:'1px solid #E8E8E8',marginBottom:10,overflow:'hidden'}}>
                 <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px 8px'}}>
@@ -1037,14 +1059,14 @@ function AdminTab({docs,upsertDoc,deleteDoc}){
                   <div style={{flex:1}}>
                     <div style={{fontSize:13,fontWeight:600}}>{predoc.name}</div>
                     <div style={{fontSize:11,color:hasAny?'#2E7D32':'#999',marginTop:2}}>
-                      {saved?.photo_recto&&saved?.photo_verso?'✅ Recto + Verso':saved?.photo_recto?'⚠️ Recto seulement':saved?.photo_verso?'⚠️ Verso seulement':'Aucune photo'}
+                      {docPhotos[predoc.id]?.photo_recto&&docPhotos[predoc.id]?.photo_verso?'✅ Recto + Verso':docPhotos[predoc.id]?.photo_recto?'⚠️ Recto seulement':docPhotos[predoc.id]?.photo_verso?'⚠️ Verso seulement':'Aucune photo'}
                     </div>
                   </div>
-                  {hasAny&&<button onClick={()=>deleteDoc(predoc.id)} style={{background:'#FFEBEE',border:'none',borderRadius:6,padding:'6px 10px',cursor:'pointer',fontSize:11,color:'#C62828'}}>✕ Suppr.</button>}
+                  {hasAny&&<button onClick={()=>handleDeleteDoc(predoc.id)} style={{background:'#FFEBEE',border:'none',borderRadius:6,padding:'6px 10px',cursor:'pointer',fontSize:11,color:'#C62828'}}>✕ Suppr.</button>}
                 </div>
                 <div style={{display:'flex',gap:8,padding:'0 14px 12px'}}>
-                  <PhotoSlot saved={saved} predoc={predoc} side="recto" label="RECTO"/>
-                  <PhotoSlot saved={saved} predoc={predoc} side="verso" label="VERSO"/>
+                  <PhotoSlot predoc={predoc} side="recto" label="RECTO"/>
+                  <PhotoSlot predoc={predoc} side="verso" label="VERSO"/>
                 </div>
               </div>
             );
