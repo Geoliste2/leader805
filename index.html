@@ -466,9 +466,20 @@ function Dashboard({trips,expenses,totalHours,totalExp,navTo,boatCode}){
       <div style={{background:'white',borderRadius:12,padding:14,border:'1px solid #E8E8E8'}}>
         <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:10}}>CE MOIS-CI</div>
         <div style={{display:'flex',justifyContent:'space-around'}}>
-          <div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:700}}>{trips.filter(t=>new Date(t.date).getMonth()===mo).length}</div><div style={{fontSize:10,color:'#888'}}>sorties</div></div>
-          <div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:700}}>{expMo.toFixed(0)}€</div><div style={{fontSize:10,color:'#888'}}>dépenses</div></div>
-          <div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:700}}>{(totalExp/2).toFixed(0)}€</div><div style={{fontSize:10,color:'#888'}}>part Stéphane</div></div>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontSize:22,fontWeight:700}}>{trips.filter(t=>new Date(t.date).getMonth()===mo&&new Date(t.date).getFullYear()===yr).length}</div>
+            <div style={{fontSize:10,color:'#888'}}>sorties</div>
+          </div>
+          <div style={{width:1,background:'#F0F0F0'}}/>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontSize:22,fontWeight:700}}>{trips.filter(t=>new Date(t.date).getMonth()===mo&&new Date(t.date).getFullYear()===yr).reduce((s,t)=>{const h=(parseFloat(t.engineEnd)||0)-(parseFloat(t.engineStart)||0);return s+(h>0?h:0);},0).toFixed(1)}h</div>
+            <div style={{fontSize:10,color:'#888'}}>moteur</div>
+          </div>
+          <div style={{width:1,background:'#F0F0F0'}}/>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontSize:22,fontWeight:700}}>{expMo.toFixed(0)}€</div>
+            <div style={{fontSize:10,color:'#888'}}>dépenses</div>
+          </div>
         </div>
       </div>
     </div>
@@ -856,10 +867,26 @@ function ExpenseForm({expense,onSave,onCancel,boatCode}){
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
+const SPECS_KEY='leader805_specs';
+const DEFAULT_SPECS=Object.fromEntries(BOAT_SPECS.map(([k,v])=>[k,v]));
+
 function AdminTab({docs,upsertDoc,deleteDoc}){
   const[subTab,setSubTab]=useState('docs');
   const[viewing,setViewing]=useState(null);
   const[uploading,setUploading]=useState(null);
+  const[editingSpecs,setEditingSpecs]=useState(false);
+  const[specValues,setSpecValues]=useState(()=>{
+    try{const s=localStorage.getItem(SPECS_KEY);return s?JSON.parse(s):DEFAULT_SPECS;}catch{return DEFAULT_SPECS;}
+  });
+
+  const saveSpecs=()=>{
+    localStorage.setItem(SPECS_KEY,JSON.stringify(specValues));
+    setEditingSpecs(false);
+  };
+  const cancelSpecs=()=>{
+    try{const s=localStorage.getItem(SPECS_KEY);setSpecValues(s?JSON.parse(s):DEFAULT_SPECS);}catch{setSpecValues(DEFAULT_SPECS);}
+    setEditingSpecs(false);
+  };
 
   const PREDEFINED=[
     {id:'permis_stephane', name:'Permis côtier — Stéphane', icon:'🪪'},
@@ -957,14 +984,31 @@ function AdminTab({docs,upsertDoc,deleteDoc}){
       )}
 
       {subTab==='specs'&&<>
-        <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>FICHE TECHNIQUE</div>
-        <div style={{background:'white',borderRadius:12,border:'1px solid #E8E8E8',overflow:'hidden'}}>
-          {BOAT_SPECS.map(([k,v],i)=>(
-            <div key={k} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 14px',background:i%2===0?'white':'#FAFAFA',borderBottom:i<BOAT_SPECS.length-1?'1px solid #F0F0F0':'none',fontSize:13}}>
-              <span style={{color:'#888'}}>{k}</span><span style={{fontWeight:600}}>{v}</span>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em'}}>FICHE TECHNIQUE</div>
+          {editingSpecs?(
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={cancelSpecs} style={{padding:'6px 12px',borderRadius:8,background:'#F0F0F0',border:'none',cursor:'pointer',fontSize:12,fontWeight:600,color:'#555',fontFamily:'inherit'}}>Annuler</button>
+              <button onClick={saveSpecs} style={{padding:'6px 12px',borderRadius:8,background:'#0B2845',border:'none',cursor:'pointer',fontSize:12,fontWeight:600,color:'white',fontFamily:'inherit'}}>✓ Enregistrer</button>
+            </div>
+          ):(
+            <button onClick={()=>setEditingSpecs(true)} style={{padding:'6px 12px',borderRadius:8,background:'#EBF0FF',border:'none',cursor:'pointer',fontSize:12,fontWeight:600,color:'#1A3A8F',fontFamily:'inherit'}}>✏️ Modifier</button>
+          )}
+        </div>
+        <div style={{background:'white',borderRadius:12,border:'1px solid #E8E8E8',overflow:'hidden',marginBottom:editingSpecs?12:0}}>
+          {BOAT_SPECS.map(([k],i)=>(
+            <div key={k} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:editingSpecs?'8px 14px':'11px 14px',background:i%2===0?'white':'#FAFAFA',borderBottom:i<BOAT_SPECS.length-1?'1px solid #F0F0F0':'none',fontSize:13,gap:12}}>
+              <span style={{color:'#888',flexShrink:0,minWidth:110}}>{k}</span>
+              {editingSpecs?(
+                <input value={specValues[k]||''} onChange={e=>setSpecValues(p=>({...p,[k]:e.target.value}))}
+                  style={{...inp,padding:'6px 10px',fontSize:13,textAlign:'right',flex:1,background:'#F8F8F8'}}/>
+              ):(
+                <span style={{fontWeight:600,textAlign:'right'}}>{specValues[k]}</span>
+              )}
             </div>
           ))}
         </div>
+        {editingSpecs&&<div style={{fontSize:11,color:'#888',textAlign:'center',padding:'4px 0 8px'}}>Les modifications sont sauvegardées sur cet appareil</div>}
       </>}
 
       {subTab==='mouillages'&&<>
