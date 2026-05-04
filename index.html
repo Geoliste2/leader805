@@ -541,23 +541,36 @@ function Bloc({label,children}){return<div style={{marginBottom:14}}><div style=
 
 // ── Expenses ──────────────────────────────────────────────────────────────────
 function ExpensesTab({expenses,upsertExpense,deleteExpense,view,setView,editItem,setEditItem,totalExp,boatCode}){
+  const[selectedYear,setSelectedYear]=useState(new Date().getFullYear());
   if(view==='form')return<ExpenseForm expense={editItem} boatCode={boatCode} onSave={async e=>{await upsertExpense({...e,id:e.id||uid()});setView('list');setEditItem(null);}} onCancel={()=>{setView('list');setEditItem(null);}}/>;
-  const byCat=CATS.map(c=>({...c,total:expenses.filter(e=>e.category===c.id).reduce((s,e)=>s+(parseFloat(e.amount)||0),0)})).filter(c=>c.total>0);
+
+  const years=[...new Set(expenses.map(e=>new Date(e.date).getFullYear()))].sort((a,b)=>b-a);
+  const filtered=expenses.filter(e=>new Date(e.date).getFullYear()===selectedYear);
+  const yearTotal=filtered.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+  const byCat=CATS.map(c=>({...c,total:filtered.filter(e=>e.category===c.id).reduce((s,e)=>s+(parseFloat(e.amount)||0),0)})).filter(c=>c.total>0);
 
   return(
     <div style={{padding:16}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
         <div style={{fontSize:16,fontWeight:700}}>Dépenses</div>
         <button onClick={()=>{setEditItem(null);setView('form');}} style={btn()}>+ Ajouter</button>
       </div>
+
+      <div style={{display:'flex',gap:8,marginBottom:14,overflowX:'auto',paddingBottom:2}}>
+        {years.map(y=>(
+          <button key={y} onClick={()=>setSelectedYear(y)} style={{padding:'7px 18px',borderRadius:20,border:`2px solid ${selectedYear===y?'#0B2845':'#E0E0E0'}`,background:selectedYear===y?'#0B2845':'white',color:selectedYear===y?'white':'#555',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit',flexShrink:0}}>{y}</button>
+        ))}
+        {!years.length&&<div style={{fontSize:13,color:'#888'}}>Aucune dépense</div>}
+      </div>
+
       <div style={{background:'#0B2845',borderRadius:14,padding:'16px 18px',marginBottom:16,color:'white'}}>
-        <div style={{fontSize:11,opacity:.7,marginBottom:10,letterSpacing:'.08em'}}>TOTAL RÉGLÉ</div>
-        <div style={{fontSize:32,fontWeight:700,marginBottom:14}}>{totalExp.toFixed(2)} €</div>
+        <div style={{fontSize:10,opacity:.7,marginBottom:8,letterSpacing:'.08em'}}>TOTAL {selectedYear}</div>
+        <div style={{fontSize:32,fontWeight:700,marginBottom:14}}>{yearTotal.toFixed(2)} €</div>
         <div style={{display:'flex',gap:0,borderTop:'1px solid rgba(255,255,255,.15)',paddingTop:12}}>
           {[
-            {label:'Stéphane',amount:expenses.filter(e=>e.paidBy==='stephane').reduce((s,e)=>s+(parseFloat(e.amount)||0),0)},
-            {label:'Olivier', amount:expenses.filter(e=>e.paidBy==='olivier').reduce((s,e)=>s+(parseFloat(e.amount)||0),0)},
-            {label:'Commun',  amount:expenses.filter(e=>e.paidBy==='commun'||!e.paidBy).reduce((s,e)=>s+(parseFloat(e.amount)||0),0)},
+            {label:'Stéphane',amount:filtered.filter(e=>e.paidBy==='stephane').reduce((s,e)=>s+(parseFloat(e.amount)||0),0)},
+            {label:'Olivier', amount:filtered.filter(e=>e.paidBy==='olivier').reduce((s,e)=>s+(parseFloat(e.amount)||0),0)},
+            {label:'Commun',  amount:filtered.filter(e=>e.paidBy==='commun'||!e.paidBy).reduce((s,e)=>s+(parseFloat(e.amount)||0),0)},
           ].map((p,i,arr)=>(
             <div key={p.label} style={{flex:1,paddingRight:i<arr.length-1?12:0,borderRight:i<arr.length-1?'1px solid rgba(255,255,255,.15)':'none',paddingLeft:i>0?12:0}}>
               <div style={{fontSize:10,opacity:.6,marginBottom:3}}>{p.label.toUpperCase()}</div>
@@ -567,17 +580,17 @@ function ExpensesTab({expenses,upsertExpense,deleteExpense,view,setView,editItem
         </div>
       </div>
       {byCat.length>0&&<>
-        <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>PAR CATÉGORIE</div>
+        <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>PAR CATÉGORIE — {selectedYear}</div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:16}}>
           {byCat.map(c=><div key={c.id} style={{background:c.bg,borderRadius:10,padding:10}}><div style={{fontSize:20}}>{c.icon}</div><div style={{fontSize:10,color:c.fg,marginTop:4}}>{c.label}</div><div style={{fontSize:16,fontWeight:700,color:c.fg}}>{c.total.toFixed(0)}€</div></div>)}
         </div>
       </>}
-      <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>HISTORIQUE</div>
-      {!expenses.length?(
-        <div style={{textAlign:'center',padding:40,color:'#888'}}><div style={{fontSize:40,marginBottom:8}}>💶</div><div style={{fontSize:13}}>Aucune dépense</div></div>
+      <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>HISTORIQUE — {selectedYear} ({filtered.length} dépense{filtered.length>1?'s':''})</div>
+      {!filtered.length?(
+        <div style={{textAlign:'center',padding:40,color:'#888'}}><div style={{fontSize:40,marginBottom:8}}>💶</div><div style={{fontSize:13}}>Aucune dépense en {selectedYear}</div></div>
       ):(
         <div style={{background:'white',borderRadius:12,border:'1px solid #E8E8E8',overflow:'hidden'}}>
-          {[...expenses].reverse().map((exp,i,arr)=>{
+          {[...filtered].sort((a,b)=>new Date(b.date)-new Date(a.date)).map((exp,i,arr)=>{
             const cat=CATS.find(c=>c.id===exp.category)||CATS[5];
             const who=exp.paidBy==='stephane'?'Stéphane':exp.paidBy==='olivier'?'Olivier':exp.paidBy==='lubin'?'Lubin':'Commun';
             const isPartial=exp.paymentMode==='acompte'||exp.paymentMode==='pourcentage';
