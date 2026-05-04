@@ -314,6 +314,95 @@ function App(){
 }
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
+// ── Weather helpers ────────────────────────────────────────────────────────
+const wmoIcon=c=>{if(c===0)return'☀️';if(c<=2)return'🌤️';if(c===3)return'☁️';if(c<=49)return'🌫️';if(c<=59)return'🌦️';if(c<=69)return'🌧️';if(c<=79)return'🌨️';if(c<=84)return'🌧️';return'⛈️';};
+const wmoLabel=c=>{if(c===0)return'Ciel dégagé';if(c<=2)return'Partiellement nuageux';if(c===3)return'Couvert';if(c<=49)return'Brume / brouillard';if(c<=59)return'Bruine';if(c<=69)return'Pluie';if(c<=79)return'Neige';if(c<=84)return'Averses';return'Orage';};
+const windDir=d=>{const dirs=['N','NE','E','SE','S','SO','O','NO'];return dirs[Math.round(d/45)%8];};
+const beaufort=k=>{if(k<1)return'Beaufort 0 — Calme';if(k<4)return'Beaufort 1';if(k<7)return'Beaufort 2 — Légère brise';if(k<11)return'Beaufort 3 — Petite brise';if(k<16)return'Beaufort 4 — Jolie brise';if(k<22)return'Beaufort 5 — Brise fraîche';if(k<28)return'Beaufort 6 — Vent frais';if(k<34)return'Beaufort 7 — Grand frais';return'Beaufort 8+ — Coup de vent ⚠️';};
+const bftColor=k=>{if(k<16)return'#2E7D32';if(k<22)return'#F57C00';if(k<28)return'#E65100';return'#C62828';};
+
+function WeatherCard(){
+  const[w,setW]=useState(null);
+  const[err,setErr]=useState(false);
+
+  useEffect(()=>{
+    (async()=>{
+      try{
+        // Coordonnées centre zone navigation : Carro / Côte Bleue
+        const LAT=43.33,LNG=5.03;
+        const[meteo,marine]=await Promise.all([
+          fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LNG}&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code&wind_speed_unit=kn&timezone=Europe%2FParis`).then(r=>r.json()),
+          fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${LAT}&longitude=${LNG}&current=wave_height,swell_wave_height&timezone=Europe%2FParis`).then(r=>r.json()),
+        ]);
+        setW({
+          temp:Math.round(meteo.current.temperature_2m),
+          wind:Math.round(meteo.current.wind_speed_10m),
+          windDir:meteo.current.wind_direction_10m,
+          code:meteo.current.weather_code,
+          wave:(marine.current?.wave_height||0).toFixed(1),
+          swell:(marine.current?.swell_wave_height||0).toFixed(1),
+          time:new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
+        });
+      }catch{setErr(true);}
+    })();
+  },[]);
+
+  if(err)return(
+    <div style={{background:'white',borderRadius:12,padding:14,marginBottom:14,border:'1px solid #E8E8E8',textAlign:'center'}}>
+      <div style={{fontSize:12,color:'#888'}}>🌊 Météo marine indisponible — vérifiez votre connexion</div>
+    </div>
+  );
+
+  if(!w)return(
+    <div style={{background:'white',borderRadius:12,padding:14,marginBottom:14,border:'1px solid #E8E8E8'}}>
+      <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>MÉTÉO MARINE — CÔTE BLEUE</div>
+      <div style={{fontSize:12,color:'#AAA',textAlign:'center',padding:'8px 0'}}>Chargement des données…</div>
+    </div>
+  );
+
+  const fc=bftColor(w.wind);
+  return(
+    <div style={{background:'white',borderRadius:12,padding:14,marginBottom:14,border:'1px solid #E8E8E8',overflow:'hidden'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em'}}>MÉTÉO MARINE — CÔTE BLEUE</div>
+        <div style={{fontSize:10,color:'#AAA'}}>MAJ {w.time}</div>
+      </div>
+      {/* Ligne principale */}
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
+        <div style={{fontSize:44}}>{wmoIcon(w.code)}</div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:13,fontWeight:600,color:'#333',marginBottom:2}}>{wmoLabel(w.code)}</div>
+          <div style={{fontSize:12,color:'#888'}}>{w.temp}°C · Carro / Côte Bleue</div>
+        </div>
+        <div style={{textAlign:'right'}}>
+          <div style={{fontSize:22,fontWeight:700,color:fc}}>{w.wind} kt</div>
+          <div style={{fontSize:11,color:fc,fontWeight:600}}>{windDir(w.windDir)}</div>
+        </div>
+      </div>
+      {/* Beaufort */}
+      <div style={{background:fc==='#2E7D32'?'#E8F5E9':fc==='#F57C00'?'#FFF3E0':fc==='#E65100'?'#FBE9E7':'#FFEBEE',borderRadius:8,padding:'7px 10px',marginBottom:10,display:'flex',alignItems:'center',gap:8}}>
+        <span style={{fontSize:16}}>💨</span>
+        <span style={{fontSize:12,fontWeight:600,color:fc}}>{beaufort(w.wind)} — {windDir(w.windDir)}</span>
+      </div>
+      {/* Mer et houle */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        <div style={{background:'#E3F2FD',borderRadius:10,padding:'10px 12px'}}>
+          <div style={{fontSize:10,color:'#1565C0',marginBottom:3}}>ÉTAT DE LA MER</div>
+          <div style={{fontSize:20,fontWeight:700,color:'#1565C0'}}>{w.wave} m</div>
+          <div style={{fontSize:10,color:'#1565C0',marginTop:2,opacity:.8}}>
+            {parseFloat(w.wave)<0.5?'Calme':parseFloat(w.wave)<1?'Peu agitée':parseFloat(w.wave)<2?'Agitée':'Forte'}
+          </div>
+        </div>
+        <div style={{background:'#E8EAF6',borderRadius:10,padding:'10px 12px'}}>
+          <div style={{fontSize:10,color:'#3949AB',marginBottom:3}}>HOULE</div>
+          <div style={{fontSize:20,fontWeight:700,color:'#3949AB'}}>{w.swell} m</div>
+          <div style={{fontSize:10,color:'#3949AB',marginTop:2,opacity:.8}}>Swell résiduel</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Dashboard({trips,expenses,totalHours,totalExp,navTo,boatCode}){
   const lastTrip=trips.length?trips[trips.length-1]:null;
   const yr=new Date().getFullYear(),mo=new Date().getMonth();
@@ -337,6 +426,9 @@ function Dashboard({trips,expenses,totalHours,totalExp,navTo,boatCode}){
           Synchronisé avec Olivier & Lubin · {boatCode}
         </div>
       </div>
+
+      <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>MÉTÉO MARINE EN DIRECT</div>
+      <WeatherCard/>
 
       <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>DERNIÈRE SORTIE</div>
       {lastTrip?(
