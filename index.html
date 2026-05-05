@@ -1381,6 +1381,15 @@ function BilanTab({trips,expenses,totalHours}){
     const v=parseFloat(baseInput)||0;
     setHoursBase(v);
     localStorage.setItem(HOURS_BASE_KEY,v.toString());
+    // Recalibrer les postes jamais renseignés (lastH=0) sur le nouvel horomètre de base
+    // → prochain entretien = hoursBase + intervalle (pas de retard fictif)
+    const recalibrated=maintenance.map(m=>{
+      if((m.lastH||0)===0&&!m.lastDate){
+        return{...m,lastH:v};
+      }
+      return m;
+    });
+    saveMaintenance(recalibrated);
     setEditingBase(false);
   };
   const markDone=id=>{
@@ -1398,10 +1407,13 @@ function BilanTab({trips,expenses,totalHours}){
 
   const mStatus=m=>{
     if(m.annuel){
-      if(!m.lastDate)return 'overdue';
+      if(!m.lastDate)return 'warning'; // jamais fait = à planifier, pas "dépassé"
       return new Date().getFullYear()-new Date(m.lastDate).getFullYear()>=1?'overdue':'ok';
     }
-    const rem=(m.lastH||0)+m.intervalH-totalHours;
+    const lastH=m.lastH||0;
+    // Si lastH < hoursBase et jamais modifié manuellement → poste non calibré, neutre
+    if(lastH<hoursBase&&lastH===0)return 'ok';
+    const rem=lastH+m.intervalH-totalHours;
     if(rem<=0)return 'overdue';
     if(rem<=15)return 'warning';
     return 'ok';
@@ -1514,11 +1526,12 @@ function BilanTab({trips,expenses,totalHours}){
         </div>
         {maintenance.map(m=>{
           const st=mStatus(m);
-          const next=m.annuel?null:Math.round((m.lastH||0)+m.intervalH);
+          const lastH=m.lastH||0;
+          const next=m.annuel?null:Math.round(lastH+m.intervalH);
           const rem=m.annuel?null:Math.round(next-totalHours);
           const color=st==='overdue'?'#C62828':st==='warning'?'#E65100':'#2E7D32';
           const bg=st==='overdue'?'#FFEBEE':st==='warning'?'#FFF3E0':'#E8F5E9';
-          const pct=m.annuel?100:Math.min(100,Math.max(0,Math.round(((totalHours-(m.lastH||0))/m.intervalH)*100)));
+          const pct=m.annuel?100:Math.min(100,Math.max(0,Math.round(((totalHours-lastH)/m.intervalH)*100)));
           return(
             <div key={m.id} style={{background:'white',borderRadius:12,border:'1.5px solid '+(st==='ok'?'#E8E8E8':color),padding:'12px 14px',marginBottom:10}}>
               <div style={{display:'flex',alignItems:'flex-start',gap:10,marginBottom:8}}>
