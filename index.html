@@ -323,23 +323,26 @@ function App(){
 // ── Dashboard ────────────────────────────────────────────────────────────────
 // ── Weather helpers ────────────────────────────────────────────────────────
 const wmoIcon=c=>{if(c===0)return'☀️';if(c<=2)return'🌤️';if(c===3)return'☁️';if(c<=49)return'🌫️';if(c<=59)return'🌦️';if(c<=69)return'🌧️';if(c<=79)return'🌨️';if(c<=84)return'🌧️';return'⛈️';};
-const wmoLabel=c=>{if(c===0)return'Ciel dégagé';if(c<=2)return'Partiellement nuageux';if(c===3)return'Couvert';if(c<=49)return'Brume / brouillard';if(c<=59)return'Bruine';if(c<=69)return'Pluie';if(c<=79)return'Neige';if(c<=84)return'Averses';return'Orage';};
+const wmoLabel=c=>{if(c===0)return'Ciel dégagé';if(c<=2)return'Partiellement nuageux';if(c===3)return'Couvert';if(c<=49)return'Brume';if(c<=59)return'Bruine';if(c<=69)return'Pluie';if(c<=79)return'Neige';if(c<=84)return'Averses';return'Orage';};
 const windDir=d=>{const dirs=['N','NE','E','SE','S','SO','O','NO'];return dirs[Math.round(d/45)%8];};
-const beaufort=k=>{if(k<1)return'Beaufort 0 — Calme';if(k<4)return'Beaufort 1';if(k<7)return'Beaufort 2 — Légère brise';if(k<11)return'Beaufort 3 — Petite brise';if(k<16)return'Beaufort 4 — Jolie brise';if(k<22)return'Beaufort 5 — Brise fraîche';if(k<28)return'Beaufort 6 — Vent frais';if(k<34)return'Beaufort 7 — Grand frais';return'Beaufort 8+ — Coup de vent ⚠️';};
+const beaufort=k=>{if(k<1)return'Calme';if(k<4)return'Bf 1';if(k<7)return'Bf 2 — Légère brise';if(k<11)return'Bf 3 — Petite brise';if(k<16)return'Bf 4 — Jolie brise';if(k<22)return'Bf 5 — Brise fraîche';if(k<28)return'Bf 6 — Vent frais';if(k<34)return'Bf 7 — Grand frais';return'Bf 8+ — Coup de vent ⚠️';};
 const bftColor=k=>{if(k<16)return'#2E7D32';if(k<22)return'#F57C00';if(k<28)return'#E65100';return'#C62828';};
+
+const FR_DAYS=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
 
 function WeatherCard(){
   const[w,setW]=useState(null);
+  const[forecast,setForecast]=useState([]);
+  const[tab,setTab]=useState('now');
   const[err,setErr]=useState(false);
 
   useEffect(()=>{
     (async()=>{
       try{
-        // Coordonnées centre zone navigation : Carro / Côte Bleue
         const LAT=43.33,LNG=5.03;
         const[meteo,marine]=await Promise.all([
-          fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LNG}&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code&wind_speed_unit=kn&timezone=Europe%2FParis`).then(r=>r.json()),
-          fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${LAT}&longitude=${LNG}&current=wave_height,swell_wave_height&timezone=Europe%2FParis`).then(r=>r.json()),
+          fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LNG}&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_direction_10m_dominant,precipitation_sum&wind_speed_unit=kn&timezone=Europe%2FParis&forecast_days=6`).then(r=>r.json()),
+          fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${LAT}&longitude=${LNG}&current=wave_height,swell_wave_height&daily=wave_height_max&timezone=Europe%2FParis&forecast_days=6`).then(r=>r.json()),
         ]);
         setW({
           temp:Math.round(meteo.current.temperature_2m),
@@ -350,61 +353,227 @@ function WeatherCard(){
           swell:(marine.current?.swell_wave_height||0).toFixed(1),
           time:new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
         });
+        // Build 5-day forecast (skip today = index 0)
+        const days=meteo.daily.time.slice(1,6).map((date,i)=>({
+          date:new Date(date),
+          code:meteo.daily.weather_code[i+1],
+          tmax:Math.round(meteo.daily.temperature_2m_max[i+1]),
+          tmin:Math.round(meteo.daily.temperature_2m_min[i+1]),
+          wind:Math.round(meteo.daily.wind_speed_10m_max[i+1]),
+          windDir:meteo.daily.wind_direction_10m_dominant[i+1],
+          rain:(meteo.daily.precipitation_sum[i+1]||0).toFixed(0),
+          wave:(marine.daily?.wave_height_max?.[i+1]||0).toFixed(1),
+        }));
+        setForecast(days);
       }catch{setErr(true);}
     })();
   },[]);
 
   if(err)return(
     <div style={{background:'white',borderRadius:12,padding:14,marginBottom:14,border:'1px solid #E8E8E8',textAlign:'center'}}>
-      <div style={{fontSize:12,color:'#888'}}>🌊 Météo marine indisponible — vérifiez votre connexion</div>
+      <div style={{fontSize:12,color:'#888'}}>🌊 Météo indisponible — vérifiez la connexion</div>
     </div>
   );
 
   if(!w)return(
     <div style={{background:'white',borderRadius:12,padding:14,marginBottom:14,border:'1px solid #E8E8E8'}}>
       <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>MÉTÉO MARINE — CÔTE BLEUE</div>
-      <div style={{fontSize:12,color:'#AAA',textAlign:'center',padding:'8px 0'}}>Chargement des données…</div>
+      <div style={{fontSize:12,color:'#AAA',textAlign:'center',padding:'8px 0'}}>Chargement…</div>
     </div>
   );
 
   const fc=bftColor(w.wind);
+
   return(
-    <div style={{background:'white',borderRadius:12,padding:14,marginBottom:14,border:'1px solid #E8E8E8',overflow:'hidden'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-        <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em'}}>MÉTÉO MARINE — CÔTE BLEUE</div>
-        <div style={{fontSize:10,color:'#AAA'}}>MAJ {w.time}</div>
+    <div style={{background:'white',borderRadius:12,marginBottom:14,border:'1px solid #E8E8E8',overflow:'hidden'}}>
+      {/* Tabs */}
+      <div style={{display:'flex',borderBottom:'1px solid #F0F0F0'}}>
+        {[['now','Maintenant'],['5j','Prévisions 5 jours']].map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:'10px 4px',background:'none',border:'none',cursor:'pointer',fontSize:12,fontWeight:tab===id?700:400,color:tab===id?'#0B2845':'#888',borderBottom:tab===id?'2px solid #0B2845':'2px solid transparent',fontFamily:'inherit'}}>
+            {label}
+          </button>
+        ))}
       </div>
-      {/* Ligne principale */}
-      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
-        <div style={{fontSize:44}}>{wmoIcon(w.code)}</div>
-        <div style={{flex:1}}>
-          <div style={{fontSize:13,fontWeight:600,color:'#333',marginBottom:2}}>{wmoLabel(w.code)}</div>
-          <div style={{fontSize:12,color:'#888'}}>{w.temp}°C · Carro / Côte Bleue</div>
-        </div>
-        <div style={{textAlign:'right'}}>
-          <div style={{fontSize:22,fontWeight:700,color:fc}}>{w.wind} kt</div>
-          <div style={{fontSize:11,color:fc,fontWeight:600}}>{windDir(w.windDir)}</div>
-        </div>
-      </div>
-      {/* Beaufort */}
-      <div style={{background:fc==='#2E7D32'?'#E8F5E9':fc==='#F57C00'?'#FFF3E0':fc==='#E65100'?'#FBE9E7':'#FFEBEE',borderRadius:8,padding:'7px 10px',marginBottom:10,display:'flex',alignItems:'center',gap:8}}>
-        <span style={{fontSize:16}}>💨</span>
-        <span style={{fontSize:12,fontWeight:600,color:fc}}>{beaufort(w.wind)} — {windDir(w.windDir)}</span>
-      </div>
-      {/* Mer et houle */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-        <div style={{background:'#E3F2FD',borderRadius:10,padding:'10px 12px'}}>
-          <div style={{fontSize:10,color:'#1565C0',marginBottom:3}}>ÉTAT DE LA MER</div>
-          <div style={{fontSize:20,fontWeight:700,color:'#1565C0'}}>{w.wave} m</div>
-          <div style={{fontSize:10,color:'#1565C0',marginTop:2,opacity:.8}}>
-            {parseFloat(w.wave)<0.5?'Calme':parseFloat(w.wave)<1?'Peu agitée':parseFloat(w.wave)<2?'Agitée':'Forte'}
+
+      {tab==='now'&&(
+        <div style={{padding:14}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em'}}>CÔTE BLEUE — EN DIRECT</div>
+            <div style={{fontSize:10,color:'#AAA'}}>MAJ {w.time}</div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
+            <div style={{fontSize:44}}>{wmoIcon(w.code)}</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:600,color:'#333',marginBottom:2}}>{wmoLabel(w.code)}</div>
+              <div style={{fontSize:12,color:'#888'}}>{w.temp}°C · Carro / Côte Bleue</div>
+            </div>
+            <div style={{textAlign:'right'}}>
+              <div style={{fontSize:22,fontWeight:700,color:fc}}>{w.wind} kt</div>
+              <div style={{fontSize:11,color:fc,fontWeight:600}}>{windDir(w.windDir)}</div>
+            </div>
+          </div>
+          <div style={{background:fc==='#2E7D32'?'#E8F5E9':fc==='#F57C00'?'#FFF3E0':fc==='#E65100'?'#FBE9E7':'#FFEBEE',borderRadius:8,padding:'7px 10px',marginBottom:10,display:'flex',alignItems:'center',gap:8}}>
+            <span style={{fontSize:16}}>💨</span>
+            <span style={{fontSize:12,fontWeight:600,color:fc}}>{beaufort(w.wind)} — {windDir(w.windDir)}</span>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            <div style={{background:'#E3F2FD',borderRadius:10,padding:'10px 12px'}}>
+              <div style={{fontSize:10,color:'#1565C0',marginBottom:3}}>ÉTAT DE LA MER</div>
+              <div style={{fontSize:20,fontWeight:700,color:'#1565C0'}}>{w.wave} m</div>
+              <div style={{fontSize:10,color:'#1565C0',marginTop:2,opacity:.8}}>{parseFloat(w.wave)<0.5?'Calme':parseFloat(w.wave)<1?'Peu agitée':parseFloat(w.wave)<2?'Agitée':'Forte'}</div>
+            </div>
+            <div style={{background:'#E8EAF6',borderRadius:10,padding:'10px 12px'}}>
+              <div style={{fontSize:10,color:'#3949AB',marginBottom:3}}>HOULE</div>
+              <div style={{fontSize:20,fontWeight:700,color:'#3949AB'}}>{w.swell} m</div>
+              <div style={{fontSize:10,color:'#3949AB',marginTop:2,opacity:.8}}>Swell résiduel</div>
+            </div>
           </div>
         </div>
-        <div style={{background:'#E8EAF6',borderRadius:10,padding:'10px 12px'}}>
-          <div style={{fontSize:10,color:'#3949AB',marginBottom:3}}>HOULE</div>
-          <div style={{fontSize:20,fontWeight:700,color:'#3949AB'}}>{w.swell} m</div>
-          <div style={{fontSize:10,color:'#3949AB',marginTop:2,opacity:.8}}>Swell résiduel</div>
+      )}
+
+      {tab==='5j'&&(
+        <div style={{padding:'10px 0'}}>
+          <div style={{padding:'0 14px 8px',fontSize:10,color:'#888',fontWeight:600,letterSpacing:'.08em'}}>PRÉVISIONS 5 JOURS — CÔTE BLEUE</div>
+          {forecast.map((d,i)=>{
+            const fc2=bftColor(d.wind);
+            const waveNum=parseFloat(d.wave);
+            const waveOk=waveNum<1;
+            const windOk=d.wind<16;
+            const goScore=waveOk&&windOk;
+            return(
+              <div key={i} style={{display:'flex',alignItems:'center',padding:'10px 14px',borderTop:'1px solid #F5F5F5',gap:10}}>
+                <div style={{width:36,flexShrink:0}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'#333'}}>{FR_DAYS[d.date.getDay()]}</div>
+                  <div style={{fontSize:10,color:'#AAA'}}>{d.date.getDate()}/{d.date.getMonth()+1}</div>
+                </div>
+                <div style={{fontSize:26,flexShrink:0}}>{wmoIcon(d.code)}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{fontSize:12,fontWeight:600,color:fc2}}>{d.wind}kt {windDir(d.windDir)}</span>
+                    <span style={{fontSize:11,color:'#999'}}>·</span>
+                    <span style={{fontSize:11,color:'#1565C0'}}>{d.wave}m</span>
+                    {d.rain>0&&<span style={{fontSize:11,color:'#5C6BC0'}}>💧{d.rain}mm</span>}
+                  </div>
+                  <div style={{fontSize:11,color:'#888',marginTop:1}}>{d.tmin}° / {d.tmax}°C</div>
+                </div>
+                <div style={{flexShrink:0,padding:'4px 8px',borderRadius:20,background:goScore?'#E8F5E9':'#FFEBEE',border:'none',fontSize:10,fontWeight:700,color:goScore?'#2E7D32':'#C62828'}}>
+                  {goScore?'✓ Go':'✗'}
+                </div>
+              </div>
+            );
+          })}
+          <div style={{padding:'8px 14px 0',fontSize:10,color:'#AAA',borderTop:'1px solid #F5F5F5'}}>
+            ✓ Go = vent &lt;16kt et mer &lt;1m · Open-Meteo / Côte Bleue
+          </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── Shared Notes ───────────────────────────────────────────────────────────────
+function SharedNotes({boatCode}){
+  const[notes,setNotes]=useState([]);
+  const[text,setText]=useState('');
+  const[author,setAuthor]=useState(()=>localStorage.getItem('leader805_author')||'');
+  const[showAuthor,setShowAuthor]=useState(false);
+  const[loading,setLoading]=useState(true);
+
+  const loadNotes=async()=>{
+    try{
+      const{data}=await db.from('notes').select('*').eq('boat_code',boatCode).order('created_at',{ascending:false}).limit(10);
+      if(data)setNotes(data);
+    }catch{}
+    setLoading(false);
+  };
+
+  useEffect(()=>{
+    if(!boatCode)return;
+    loadNotes();
+    // Realtime
+    const ch=db.channel('notes-'+boatCode)
+      .on('postgres_changes',{event:'*',schema:'public',table:'notes',filter:`boat_code=eq.${boatCode}`},()=>loadNotes())
+      .subscribe();
+    return()=>ch.unsubscribe();
+  },[boatCode]);
+
+  const saveAuthor=name=>{
+    localStorage.setItem('leader805_author',name);
+    setAuthor(name);
+    setShowAuthor(false);
+  };
+
+  const postNote=async()=>{
+    if(!text.trim())return;
+    if(!author){setShowAuthor(true);return;}
+    try{
+      await db.from('notes').insert({id:uid(),boat_code:boatCode,author,text:text.trim(),created_at:new Date().toISOString()});
+      setText('');
+      loadNotes();
+    }catch{}
+  };
+
+  const deleteNote=async id=>{
+    await db.from('notes').delete().eq('id',id);
+    setNotes(p=>p.filter(n=>n.id!==id));
+  };
+
+  const timeAgo=d=>{
+    const s=Math.round((Date.now()-new Date(d))/1000);
+    if(s<60)return 'à l\'instant';
+    if(s<3600)return Math.floor(s/60)+'min';
+    if(s<86400)return Math.floor(s/3600)+'h';
+    return Math.floor(s/86400)+'j';
+  };
+
+  const COLORS={'Stéphane':'#0B2845','Olivier':'#1565C0','Lubin':'#2E7D32','Aurélie':'#AD1457','Claire-Lise':'#6A1B9A','Maman':'#E65100'};
+  const authorColor=a=>COLORS[a]||'#555';
+
+  if(showAuthor)return(
+    <div style={{background:'white',borderRadius:12,padding:14,marginBottom:14,border:'1px solid #E8E8E8'}}>
+      <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>Qui êtes-vous ?</div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+        {['Stéphane','Olivier','Lubin','Aurélie','Claire-Lise','Maman'].map(n=>(
+          <button key={n} onClick={()=>saveAuthor(n)} style={{padding:'8px 14px',borderRadius:20,border:'1.5px solid #D0D0D0',background:'white',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit',color:'#333'}}>{n}</button>
+        ))}
+      </div>
+    </div>
+  );
+
+  return(
+    <div style={{background:'white',borderRadius:12,marginBottom:14,border:'1px solid #E8E8E8',overflow:'hidden'}}>
+      <div style={{padding:'12px 14px 8px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em'}}>📝 NOTES PARTAGÉES</div>
+        {author&&<button onClick={()=>setShowAuthor(true)} style={{fontSize:10,color:'#888',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit'}}>{author} ▾</button>}
+      </div>
+      {/* Notes list */}
+      {loading?(
+        <div style={{padding:'10px 14px',fontSize:12,color:'#AAA'}}>Chargement…</div>
+      ):notes.length===0?(
+        <div style={{padding:'8px 14px',fontSize:12,color:'#AAA',fontStyle:'italic'}}>Aucune note — soyez le premier à écrire !</div>
+      ):(
+        <div style={{maxHeight:200,overflowY:'auto'}}>
+          {notes.map(n=>(
+            <div key={n.id} style={{display:'flex',gap:10,padding:'8px 14px',borderTop:'1px solid #F5F5F5'}}>
+              <div style={{width:28,height:28,borderRadius:14,background:authorColor(n.author),color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>
+                {n.author?.[0]||'?'}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:'flex',gap:6,alignItems:'baseline',marginBottom:2}}>
+                  <span style={{fontSize:11,fontWeight:700,color:authorColor(n.author)}}>{n.author}</span>
+                  <span style={{fontSize:10,color:'#BBB'}}>{timeAgo(n.created_at)}</span>
+                </div>
+                <div style={{fontSize:13,color:'#333',lineHeight:1.5}}>{n.text}</div>
+              </div>
+              {n.author===author&&<button onClick={()=>deleteNote(n.id)} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,color:'#DDD',flexShrink:0,padding:'0 2px'}}>✕</button>}
+            </div>
+          ))}
+        </div>
+      )}
+      {/* Input */}
+      <div style={{padding:'10px 14px',borderTop:'1px solid #F0F0F0',display:'flex',gap:8}}>
+        <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&postNote()} placeholder="Plein à 3/4, vérifier les amarres..." style={{...inp,flex:1,padding:'8px 12px',fontSize:12}}/>
+        <button onClick={postNote} disabled={!text.trim()} style={{...btn(text.trim()?'#0B2845':'#CCC','white'),padding:'8px 14px',borderRadius:10,flexShrink:0,cursor:text.trim()?'pointer':'default'}}>→</button>
       </div>
     </div>
   );
@@ -464,8 +633,11 @@ function Dashboard({trips,expenses,totalHours,totalExp,navTo,boatCode,hoursBase}
         </div>
       </div>
 
-      <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>MÉTÉO MARINE EN DIRECT</div>
+      <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>MÉTÉO MARINE</div>
       <WeatherCard/>
+
+      <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>📝 NOTES DE L'ÉQUIPAGE</div>
+      <SharedNotes boatCode={boatCode}/>
 
       <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>DERNIÈRE SORTIE</div>
       {lastTrip?(
@@ -1044,6 +1216,7 @@ const MOUILLAGES_KEY='leader805_mouillages';
 const DOCPHOTOS_KEY='leader805_doc_photos';
 const MAINTENANCE_KEY='leader805_maintenance';
 const HOURS_BASE_KEY='leader805_hours_base';
+const NOTES_KEY='leader805_notes';
 const DEFAULT_SPECS=Object.fromEntries(BOAT_SPECS.map(([k,v])=>[k,v]));
 const DEFAULT_MOUILLAGES=MOUILLAGES.map((m,i)=>({...m,id:'m'+i,phone:''}));
 const DEFAULT_MAINTENANCE=[
