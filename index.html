@@ -266,7 +266,7 @@ function App(){
 
   const totalExp=expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
   const hoursBase=parseFloat(localStorage.getItem(HOURS_BASE_KEY)||'0');
-  const totalHours=hoursBase+trips.reduce((s,t)=>{const h=(parseFloat(t.engineEnd)||0)-(parseFloat(t.engineStart)||0);return s+(h>0?h:0);},0);
+  const totalHours=Math.round(hoursBase+trips.reduce((s,t)=>{const h=(parseFloat(t.engineEnd)||0)-(parseFloat(t.engineStart)||0);return s+(h>0?h:0);},0));
 
   const TABS=[{icon:'⚓',label:'Accueil'},{icon:'📓',label:'Carnet'},{icon:'💶',label:'Dépenses'},{icon:'📋',label:'Admin'},{icon:'🆘',label:'Urgences'},{icon:'📈',label:'Bilan'}];
 
@@ -416,15 +416,17 @@ function Dashboard({trips,expenses,totalHours,totalExp,navTo,boatCode}){
   const tripsYr=trips.filter(t=>new Date(t.date).getFullYear()===yr).length;
   const expMo=expenses.filter(e=>new Date(e.date).getMonth()===mo).reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
 
-  // Alertes maintenance
+  // Alertes maintenance — même logique que BilanTab
   const maintenance=JSON.parse(localStorage.getItem(MAINTENANCE_KEY)||'null')||DEFAULT_MAINTENANCE;
   const overdueAlerts=maintenance.filter(m=>{
-    if(m.annuel)return !m.lastDate||new Date().getFullYear()-new Date(m.lastDate).getFullYear()>=1;
-    return (m.lastH||0)+m.intervalH-totalHours<=0;
+    if(m.annuel)return m.lastDate&&new Date().getFullYear()-new Date(m.lastDate).getFullYear()>=1;
+    const effectiveLastH=Math.max(m.lastH||0,hoursBase);
+    return effectiveLastH+m.intervalH-totalHours<=0;
   });
   const warnAlerts=maintenance.filter(m=>{
     if(m.annuel)return false;
-    const rem=(m.lastH||0)+m.intervalH-totalHours;
+    const effectiveLastH=Math.max(m.lastH||0,hoursBase);
+    const rem=effectiveLastH+m.intervalH-totalHours;
     return rem>0&&rem<=15;
   });
 
@@ -450,7 +452,7 @@ function Dashboard({trips,expenses,totalHours,totalExp,navTo,boatCode}){
         <div style={{position:'absolute',right:-10,top:-10,fontSize:80,opacity:.07}}>⚓</div>
         <div style={{fontSize:10,opacity:.7,letterSpacing:'.1em',marginBottom:10}}>CÔTE BLEUE · MÉDITERRANÉE</div>
         <div style={{display:'flex',gap:20}}>
-          <div><div style={{fontSize:24,fontWeight:700}}>{totalHours.toFixed(1)}h</div><div style={{fontSize:10,opacity:.7}}>Moteur total</div></div>
+          <div><div style={{fontSize:24,fontWeight:700}}>{totalHours}h</div><div style={{fontSize:10,opacity:.7}}>Moteur total</div></div>
           <div style={{width:1,background:'rgba(255,255,255,.2)'}}/>
           <div><div style={{fontSize:24,fontWeight:700}}>{tripsYr}</div><div style={{fontSize:10,opacity:.7}}>Sorties {yr}</div></div>
           <div style={{width:1,background:'rgba(255,255,255,.2)'}}/>
@@ -1437,7 +1439,7 @@ function BilanTab({trips,expenses,totalHours}){
     doc.text('Chiffres cles '+yr,14,42);
     const stats=[
       [yTrips.length+' sortie'+(yTrips.length>1?'s':''),'en mer'],
-      [yHours.toFixed(1)+' h','moteur'],
+      [Math.round(yHours)+' h','moteur'],
       [yExp.toFixed(0)+' €','depenses'],
       [(yExp/2).toFixed(0)+' €','part/pers.']
     ];
@@ -1497,7 +1499,7 @@ function BilanTab({trips,expenses,totalHours}){
         <div style={{background:'#0B2845',borderRadius:12,padding:'12px 14px',marginBottom:14,color:'white',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div>
             <div style={{fontSize:10,opacity:.7,letterSpacing:'.1em',marginBottom:2}}>HOROMÈTRE TOTAL</div>
-            <div style={{fontSize:26,fontWeight:700}}>{totalHours.toFixed(1)} h</div>
+            <div style={{fontSize:26,fontWeight:700}}>{totalHours} h</div>
             <div style={{fontSize:10,opacity:.5,marginTop:2}}>{hoursBase>0?`Base : ${hoursBase}h + sorties saisies`:'Calculé depuis les sorties'}</div>
           </div>
           <div style={{textAlign:'right'}}>
@@ -1553,7 +1555,7 @@ function BilanTab({trips,expenses,totalHours}){
               </div>}
               <div style={{display:'flex',gap:8}}>
                 <button onClick={()=>markDone(m.id)} style={{flex:1,padding:'8px',borderRadius:8,background:bg,border:'1px solid '+color,cursor:'pointer',fontSize:12,fontWeight:700,color,fontFamily:'inherit'}}>
-                  ✓ Fait à {totalHours.toFixed(1)}h
+                  ✓ Fait à {totalHours}h
                 </button>
                 <button onClick={()=>setEditing(editing===m.id?null:m.id)} style={{padding:'8px 12px',borderRadius:8,background:'#F5F5F5',border:'1px solid #E0E0E0',cursor:'pointer',fontSize:12,color:'#555',fontFamily:'inherit'}}>✏️</button>
               </div>
@@ -1578,7 +1580,7 @@ function BilanTab({trips,expenses,totalHours}){
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
           {[
-            {icon:'⏱️',label:'Heures moteur '+selectedYear,val:yHours.toFixed(1)+' h',bg:'#E3F2FD',fg:'#1565C0'},
+            {icon:'⏱️',label:'Heures moteur '+selectedYear,val:Math.round(yHours)+' h',bg:'#E3F2FD',fg:'#1565C0'},
             {icon:'⛽',label:'Coût carburant '+selectedYear,val:yFuel.toFixed(0)+' €',bg:'#FFF3E0',fg:'#E65100'},
             {icon:'💶',label:'Coût / heure moteur',val:costPerH?costPerH+' €/h':'N/A',bg:'#E8F5E9',fg:'#2E7D32'},
             {icon:'🔥',label:'Conso estimée',val:litresPerH?'~'+litresPerH+' L/h':'N/A',bg:'#FFEBEE',fg:'#C62828'},
@@ -1625,7 +1627,7 @@ function BilanTab({trips,expenses,totalHours}){
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
             {[
               [yTrips.length+'','sortie'+(yTrips.length>1?'s':'')],
-              [yHours.toFixed(1)+'h','moteur'],
+              [Math.round(yHours)+'h','moteur'],
               [yExp.toFixed(0)+'€','dépenses'],
               [(yExp/2).toFixed(0)+'€','part/pers.'],
             ].map(([v,l],i)=>(
