@@ -210,15 +210,16 @@ function App(){
 
   useEffect(()=>{if(boatCode)loadAll(boatCode);},[boatCode]);
 
-  // Temps réel
+  // Temps réel Supabase
   useEffect(()=>{
     if(!boatCode)return;
     const ch=db.channel('boat-'+boatCode)
-      .on('postgres_changes',{event:'*',schema:'public',table:'trips'},()=>loadAll(boatCode))
-      .on('postgres_changes',{event:'*',schema:'public',table:'expenses'},()=>loadAll(boatCode))
-      .on('postgres_changes',{event:'*',schema:'public',table:'documents'},()=>loadAll(boatCode))
+      .on('postgres_changes',{event:'*',schema:'public',table:'trips',filter:`boat_code=eq.${boatCode}`},()=>loadAll(boatCode))
+      .on('postgres_changes',{event:'*',schema:'public',table:'expenses',filter:`boat_code=eq.${boatCode}`},()=>loadAll(boatCode))
       .subscribe();
-    return()=>ch.unsubscribe();
+    // Fallback polling toutes les 30s si realtime ne reçoit rien
+    const poll=setInterval(()=>loadAll(boatCode),30000);
+    return()=>{ch.unsubscribe();clearInterval(poll);};
   },[boatCode]);
 
   const upsertTrip=async trip=>{
