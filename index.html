@@ -1365,9 +1365,10 @@ function EmergencyTab(){
 function BilanTab({trips,expenses,totalHours}){
   const[sub,setSub]=useState('entretien');
   const[maintenance,setMaintenance]=useState(()=>{
-    try{return JSON.parse(localStorage.getItem(MAINTENANCE_KEY))||DEFAULT_MAINTENANCE;}catch{return DEFAULT_MAINTENANCE;}
+    try{return JSON.parse(localStorage.getItem(MAINTENANCE_KEY))||DEFAULT_MAINTENANCE;}
+    catch{return DEFAULT_MAINTENANCE;}
   });
-  const[editing,setEditing]=useState(null); // item being edited
+  const[editing,setEditing]=useState(null);
   const[selectedYear,setSelectedYear]=useState(new Date().getFullYear());
 
   const saveMaintenance=list=>{setMaintenance(list);localStorage.setItem(MAINTENANCE_KEY,JSON.stringify(list));};
@@ -1376,164 +1377,153 @@ function BilanTab({trips,expenses,totalHours}){
     saveMaintenance(maintenance.map(m=>m.id===id?{...m,lastH:Math.round(totalHours*10)/10,lastDate:today}:m));
   };
 
-  // ── Stats for consumption ─────────────────────────────────────────────────
   const years=[...new Set([...trips,...expenses].map(x=>new Date(x.date).getFullYear()))].sort((a,b)=>b-a);
   const yTrips=trips.filter(t=>new Date(t.date).getFullYear()===selectedYear);
   const yHours=yTrips.reduce((s,t)=>{const h=(parseFloat(t.engineEnd)||0)-(parseFloat(t.engineStart)||0);return s+(h>0?h:0);},0);
   const yFuel=expenses.filter(e=>e.category==='fuel'&&new Date(e.date).getFullYear()===selectedYear).reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
   const yExp=expenses.filter(e=>new Date(e.date).getFullYear()===selectedYear).reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
   const costPerH=yHours>0?(yFuel/yHours).toFixed(2):null;
-  const litresPerH=yHours>0?(yFuel/1.85/yHours).toFixed(1):null; // ~1.85€/L estimation
+  const litresPerH=yHours>0?(yFuel/1.85/yHours).toFixed(1):null;
 
-  // ── Maintenance status ────────────────────────────────────────────────────
   const mStatus=m=>{
     if(m.annuel){
-      if(!m.lastDate)return'overdue';
-      const lastYear=new Date(m.lastDate).getFullYear();
-      const diff=new Date().getFullYear()-lastYear;
-      return diff>=1?'overdue':diff>=0?'ok':'ok';
+      if(!m.lastDate)return 'overdue';
+      return new Date().getFullYear()-new Date(m.lastDate).getFullYear()>=1?'overdue':'ok';
     }
-    const next=m.lastH+(m.intervalH||100);
-    const rem=next-totalHours;
-    if(rem<=0)return'overdue';
-    if(rem<=15)return'warning';
-    return'ok';
+    const rem=(m.lastH||0)+m.intervalH-totalHours;
+    if(rem<=0)return 'overdue';
+    if(rem<=15)return 'warning';
+    return 'ok';
   };
   const overdueCount=maintenance.filter(m=>mStatus(m)==='overdue').length;
   const warnCount=maintenance.filter(m=>mStatus(m)==='warning').length;
 
-  // ── PDF export ────────────────────────────────────────────────────────────
   const exportPDF=()=>{
     const{jsPDF}=window.jspdf;
     const doc=new jsPDF();
     const yr=selectedYear;
-    // Header
     doc.setFillColor(11,40,69);
-    doc.rect(0,0,210,30,\'F\');
+    doc.rect(0,0,210,30,'F');
     doc.setTextColor(255,255,255);
-    doc.setFontSize(18);doc.setFont(\'helvetica\',\'bold\');
-    doc.text(`Bilan ${yr} — Leader 805`,14,13);
-    doc.setFontSize(9);doc.setFont(\'helvetica\',\'normal\');
-    doc.text(`Côte Bleue · Jeanneau Leader 805 · Immat. TL D30523`,14,22);
-    doc.text(`Généré le ${new Date().toLocaleDateString(\'fr-FR\')}`,196,22,{align:\'right\'});
-
-    // Stats bloc
+    doc.setFontSize(18);doc.setFont('helvetica','bold');
+    doc.text('Bilan '+yr+' — Leader 805',14,13);
+    doc.setFontSize(9);doc.setFont('helvetica','normal');
+    doc.text('Cote Bleue · Jeanneau Leader 805 · Immat. TL D30523',14,22);
+    doc.text('Genere le '+new Date().toLocaleDateString('fr-FR'),196,22,{align:'right'});
     doc.setTextColor(11,40,69);
-    doc.setFontSize(11);doc.setFont(\'helvetica\',\'bold\');
-    doc.text(`Chiffres clés ${yr}`,14,42);
-    const stats=[[`${yTrips.length} sortie${yTrips.length>1?\'s\':\'\'}`,\'en mer\'],[`${yHours.toFixed(1)} h`,\'moteur\'],[`${yExp.toFixed(0)} €`,\'dépenses\'],[`${(yExp/2).toFixed(0)} €`,\'part/pers.\']];
+    doc.setFontSize(11);doc.setFont('helvetica','bold');
+    doc.text('Chiffres cles '+yr,14,42);
+    const stats=[
+      [yTrips.length+' sortie'+(yTrips.length>1?'s':''),'en mer'],
+      [yHours.toFixed(1)+' h','moteur'],
+      [yExp.toFixed(0)+' €','depenses'],
+      [(yExp/2).toFixed(0)+' €','part/pers.']
+    ];
     stats.forEach(([val,lab],i)=>{
       const x=14+i*48;
-      doc.setFillColor(235,240,255);doc.roundedRect(x,46,44,18,2,2,\'F\');
-      doc.setFontSize(14);doc.setFont(\'helvetica\',\'bold\');doc.setTextColor(11,40,69);
-      doc.text(val,x+22,55,{align:\'center\'});
-      doc.setFontSize(8);doc.setFont(\'helvetica\',\'normal\');doc.setTextColor(100,100,100);
-      doc.text(lab,x+22,61,{align:\'center\'});
+      doc.setFillColor(235,240,255);doc.roundedRect(x,46,44,18,2,2,'F');
+      doc.setFontSize(14);doc.setFont('helvetica','bold');doc.setTextColor(11,40,69);
+      doc.text(val,x+22,55,{align:'center'});
+      doc.setFontSize(8);doc.setFont('helvetica','normal');doc.setTextColor(100,100,100);
+      doc.text(lab,x+22,61,{align:'center'});
     });
-
-    // Sorties
-    doc.setFontSize(11);doc.setFont(\'helvetica\',\'bold\');doc.setTextColor(11,40,69);
-    doc.text(`Sorties ${yr}`,14,78);
+    doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(11,40,69);
+    doc.text('Sorties '+yr,14,78);
     const tripRows=yTrips.map(t=>{
       const h=(parseFloat(t.engineEnd)||0)-(parseFloat(t.engineStart)||0);
-      return[new Date(t.date).toLocaleDateString(\'fr-FR\',{day:\'numeric\',month:\'short\'}),t.route||\'—\',t.crew?.join(\', \')||\'—\',h>0?`${h.toFixed(1)}h`:\'—\'];
+      return[
+        new Date(t.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}),
+        t.route||'—',
+        (t.crew||[]).join(', ')||'—',
+        h>0?h.toFixed(1)+'h':'—'
+      ];
     });
-    doc.autoTable({startY:81,head:[[\'Date\',\'Parcours\',\'Équipage\',\'Moteur\']],body:tripRows,styles:{fontSize:8,cellPadding:2},headStyles:{fillColor:[11,40,69],textColor:255,fontStyle:\'bold\'},alternateRowStyles:{fillColor:[245,246,248]},margin:{left:14,right:14}});
-
-    // Dépenses
+    doc.autoTable({startY:81,head:[['Date','Parcours','Equipage','Moteur']],body:tripRows,styles:{fontSize:8,cellPadding:2},headStyles:{fillColor:[11,40,69],textColor:255,fontStyle:'bold'},alternateRowStyles:{fillColor:[245,246,248]},margin:{left:14,right:14}});
     const afterTrips=doc.lastAutoTable.finalY+8;
-    doc.setFontSize(11);doc.setFont(\'helvetica\',\'bold\');doc.setTextColor(11,40,69);
-    doc.text(`Dépenses ${yr}`,14,afterTrips);
+    doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(11,40,69);
+    doc.text('Depenses '+yr,14,afterTrips);
     const yExpenses=expenses.filter(e=>new Date(e.date).getFullYear()===yr);
     const expRows=yExpenses.map(e=>{
       const cat=CATS.find(c=>c.id===e.category)||CATS[5];
-      const who=e.paidBy===\'stephane\'?\'Stéphane\':e.paidBy===\'olivier\'?\'Olivier\':e.paidBy===\'lubin\'?\'Lubin\':\'Commun\';
-      return[new Date(e.date).toLocaleDateString(\'fr-FR\',{day:\'numeric\',month:\'short\'}),cat.label,e.description||\'—\',who,`${parseFloat(e.amount).toFixed(2)} €`];
+      const who=e.paidBy==='stephane'?'Stephane':e.paidBy==='olivier'?'Olivier':e.paidBy==='lubin'?'Lubin':'Commun';
+      return[new Date(e.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}),cat.label,e.description||'—',who,parseFloat(e.amount).toFixed(2)+' €'];
     });
-    doc.autoTable({startY:afterTrips+3,head:[[\'Date\',\'Catégorie\',\'Description\',\'Payé par\',\'Montant\']],body:expRows,styles:{fontSize:8,cellPadding:2},headStyles:{fillColor:[11,40,69],textColor:255,fontStyle:\'bold\'},alternateRowStyles:{fillColor:[245,246,248]},margin:{left:14,right:14},columnStyles:{4:{halign:\'right\'}}});
-
-    // Total
-    const afterExp=doc.lastAutoTable.finalY+2;
-    doc.setFont(\'helvetica\',\'bold\');doc.setFontSize(9);doc.setTextColor(11,40,69);
-    doc.text(`Total ${yr} : ${yExp.toFixed(2)} €  |  Part Stéphane : ${(yExp/2).toFixed(2)} €  |  Part Olivier : ${(yExp/2).toFixed(2)} €`,14,afterExp+6);
-
-    doc.save(`bilan_leader805_${yr}.pdf`);
+    doc.autoTable({startY:afterTrips+3,head:[['Date','Categorie','Description','Paye par','Montant']],body:expRows,styles:{fontSize:8,cellPadding:2},headStyles:{fillColor:[11,40,69],textColor:255,fontStyle:'bold'},alternateRowStyles:{fillColor:[245,246,248]},margin:{left:14,right:14},columnStyles:{4:{halign:'right'}}});
+    const afterExp=doc.lastAutoTable.finalY+6;
+    doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(11,40,69);
+    doc.text('Total '+yr+' : '+yExp.toFixed(2)+' €  |  Part Stephane : '+(yExp/2).toFixed(2)+' €  |  Part Olivier : '+(yExp/2).toFixed(2)+' €',14,afterExp);
+    doc.save('bilan_leader805_'+yr+'.pdf');
   };
 
   const SubBtn=({id,label,badge})=>(
-    <button onClick={()=>setSub(id)} style={{flex:1,padding:\'8px 4px\',borderRadius:10,border:\'none\',background:sub===id?\'#0B2845\':\'#EBEBEB\',color:sub===id?\'white\':\'#555\',cursor:\'pointer\',fontSize:11,fontWeight:700,fontFamily:\'inherit\',position:\'relative\'}}>
+    <button onClick={()=>setSub(id)} style={{flex:1,padding:'8px 4px',borderRadius:10,border:'none',background:sub===id?'#0B2845':'#EBEBEB',color:sub===id?'white':'#555',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit',position:'relative'}}>
       {label}
-      {badge>0&&<span style={{position:\'absolute\',top:4,right:4,background:\'#C62828\',color:\'white\',borderRadius:20,fontSize:9,fontWeight:700,padding:\'1px 5px\'}}>{badge}</span>}
+      {badge>0&&<span style={{position:'absolute',top:4,right:4,background:'#C62828',color:'white',borderRadius:20,fontSize:9,fontWeight:700,padding:'1px 5px'}}>{badge}</span>}
     </button>
   );
 
   return(
     <div style={{padding:16}}>
       <div style={{fontSize:16,fontWeight:700,marginBottom:16}}>Bilan & Suivi</div>
-      <div style={{display:\'flex\',gap:6,marginBottom:16}}>
+      <div style={{display:'flex',gap:6,marginBottom:16}}>
         <SubBtn id="entretien" label="🔔 Entretien" badge={overdueCount+warnCount}/>
         <SubBtn id="conso" label="⛽ Conso"/>
         <SubBtn id="bilan" label="📊 Bilan PDF"/>
       </div>
 
-      {/* ── ENTRETIEN ── */}
-      {sub===\'entretien\'&&<>
-        <div style={{background:\'#0B2845\',borderRadius:12,padding:\'12px 14px\',marginBottom:14,color:\'white\',display:\'flex\',justifyContent:\'space-between\',alignItems:\'center\'}}>
+      {sub==='entretien'&&<>
+        <div style={{background:'#0B2845',borderRadius:12,padding:'12px 14px',marginBottom:14,color:'white',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div>
-            <div style={{fontSize:10,opacity:.7,letterSpacing:\'.1em\',marginBottom:2}}>HOROMÈTRE TOTAL</div>
+            <div style={{fontSize:10,opacity:.7,letterSpacing:'.1em',marginBottom:2}}>HOROMÈTRE TOTAL</div>
             <div style={{fontSize:26,fontWeight:700}}>{totalHours.toFixed(1)} h</div>
           </div>
-          <div style={{textAlign:\'right\'}}>
-            {overdueCount>0&&<div style={{fontSize:12,fontWeight:700,color:\'#FF5252\',marginBottom:4}}>⚠️ {overdueCount} dépassé{overdueCount>1?\'s\':\'\'}</div>}
-            {warnCount>0&&<div style={{fontSize:12,fontWeight:700,color:\'#FFB300\'}}>⏰ {warnCount} bientôt dû{warnCount>1?\'s\':\'\'}</div>}
-            {overdueCount===0&&warnCount===0&&<div style={{fontSize:12,color:\'#4CAF50\',fontWeight:700}}>✅ Tout à jour</div>}
+          <div style={{textAlign:'right'}}>
+            {overdueCount>0&&<div style={{fontSize:12,fontWeight:700,color:'#FF5252',marginBottom:4}}>⚠️ {overdueCount} dépassé{overdueCount>1?'s':''}</div>}
+            {warnCount>0&&<div style={{fontSize:12,fontWeight:700,color:'#FFB300'}}>⏰ {warnCount} bientôt dû{warnCount>1?'s':''}</div>}
+            {overdueCount===0&&warnCount===0&&<div style={{fontSize:12,color:'#4CAF50',fontWeight:700}}>✅ Tout à jour</div>}
           </div>
         </div>
-
         {maintenance.map(m=>{
           const st=mStatus(m);
           const next=m.annuel?null:Math.round((m.lastH||0)+m.intervalH);
           const rem=m.annuel?null:Math.round(next-totalHours);
-          const color=st===\'overdue\'?\'#C62828\':st===\'warning\'?\'#E65100\':\'#2E7D32\';
-          const bg=st===\'overdue\'?\'#FFEBEE\':st===\'warning\'?\'#FFF3E0\':\'#E8F5E9\';
+          const color=st==='overdue'?'#C62828':st==='warning'?'#E65100':'#2E7D32';
+          const bg=st==='overdue'?'#FFEBEE':st==='warning'?'#FFF3E0':'#E8F5E9';
           const pct=m.annuel?100:Math.min(100,Math.max(0,Math.round(((totalHours-(m.lastH||0))/m.intervalH)*100)));
-
           return(
-            <div key={m.id} style={{background:\'white\',borderRadius:12,border:`1.5px solid ${st===\'ok\'?\'#E8E8E8\':color}`,padding:\'12px 14px\',marginBottom:10}}>
-              <div style={{display:\'flex\',alignItems:\'flex-start\',gap:10,marginBottom:8}}>
+            <div key={m.id} style={{background:'white',borderRadius:12,border:'1.5px solid '+(st==='ok'?'#E8E8E8':color),padding:'12px 14px',marginBottom:10}}>
+              <div style={{display:'flex',alignItems:'flex-start',gap:10,marginBottom:8}}>
                 <span style={{fontSize:22,flexShrink:0}}>{m.icon}</span>
                 <div style={{flex:1}}>
                   <div style={{fontSize:13,fontWeight:700}}>{m.label}</div>
-                  <div style={{fontSize:11,color:\'#888\',marginTop:1}}>
-                    {m.annuel?(m.lastDate?`Dernier : ${new Date(m.lastDate).toLocaleDateString(\'fr-FR\')} — Annuel`:`Jamais effectué`)
-                    :`Dernier : ${m.lastH||0}h · Prochain : ${next}h`}
+                  <div style={{fontSize:11,color:'#888',marginTop:1}}>
+                    {m.annuel?(m.lastDate?'Dernier : '+new Date(m.lastDate).toLocaleDateString('fr-FR')+' — Annuel':'Jamais effectué')
+                    :'Dernier : '+(m.lastH||0)+'h · Prochain : '+next+'h'}
                   </div>
                 </div>
-                <div style={{textAlign:\'right\',flexShrink:0}}>
-                  <div style={{fontSize:12,fontWeight:700,color}}>{m.annuel?(st===\'overdue\'?\'À faire\':\'✓ OK\'):(rem<=0?`${Math.abs(rem)}h dépassé`:rem<=15?`⏰ ${rem}h restant`:`${rem}h restant`)}</div>
+                <div style={{textAlign:'right',flexShrink:0}}>
+                  <div style={{fontSize:12,fontWeight:700,color}}>
+                    {m.annuel?(st==='overdue'?'À faire':'✓ OK'):(rem<=0?Math.abs(rem)+'h dépassé':rem<=15?'⏰ '+rem+'h restant':rem+'h restant')}
+                  </div>
                 </div>
               </div>
-              {/* Progress bar */}
-              {!m.annuel&&<div style={{height:4,background:\'#F0F0F0\',borderRadius:2,marginBottom:10,overflow:\'hidden\'}}>
-                <div style={{height:\'100%\',width:`${pct}%`,background:color,borderRadius:2,transition:\'width .3s\'}}/>
+              {!m.annuel&&<div style={{height:4,background:'#F0F0F0',borderRadius:2,marginBottom:10,overflow:'hidden'}}>
+                <div style={{height:'100%',width:pct+'%',background:color,borderRadius:2}}/>
               </div>}
-              <div style={{display:\'flex\',gap:8}}>
-                <button onClick={()=>markDone(m.id)} style={{flex:1,padding:\'8px\',borderRadius:8,background:bg,border:`1px solid ${color}`,cursor:\'pointer\',fontSize:12,fontWeight:700,color,fontFamily:\'inherit\'}}>
-                  ✓ Marquer comme effectué ({totalHours.toFixed(1)}h)
+              <div style={{display:'flex',gap:8}}>
+                <button onClick={()=>markDone(m.id)} style={{flex:1,padding:'8px',borderRadius:8,background:bg,border:'1px solid '+color,cursor:'pointer',fontSize:12,fontWeight:700,color,fontFamily:'inherit'}}>
+                  ✓ Fait à {totalHours.toFixed(1)}h
                 </button>
-                <button onClick={()=>setEditing(editing===m.id?null:m.id)} style={{padding:\'8px 12px\',borderRadius:8,background:\'#F5F5F5\',border:\'1px solid #E0E0E0\',cursor:\'pointer\',fontSize:12,color:\'#555\',fontFamily:\'inherit\'}}>
-                  ✏️
-                </button>
+                <button onClick={()=>setEditing(editing===m.id?null:m.id)} style={{padding:'8px 12px',borderRadius:8,background:'#F5F5F5',border:'1px solid #E0E0E0',cursor:'pointer',fontSize:12,color:'#555',fontFamily:'inherit'}}>✏️</button>
               </div>
-              {/* Edit interval */}
-              {editing===m.id&&<div style={{marginTop:10,padding:\'10px 12px\',background:\'#F8F8F8\',borderRadius:8}}>
-                {!m.annuel&&<div style={{display:\'flex\',gap:10,alignItems:\'center\',marginBottom:8}}>
-                  <div style={{fontSize:12,color:\'#666\',flexShrink:0}}>Intervalle (h) :</div>
-                  <input type="number" defaultValue={m.intervalH} onBlur={e=>saveMaintenance(maintenance.map(x=>x.id===m.id?{...x,intervalH:parseInt(e.target.value)||x.intervalH}:x))} style={{...inp,padding:\'6px 10px\',width:80,fontSize:13,fontWeight:700}}/>
+              {editing===m.id&&<div style={{marginTop:10,padding:'10px 12px',background:'#F8F8F8',borderRadius:8}}>
+                {!m.annuel&&<div style={{display:'flex',gap:10,alignItems:'center',marginBottom:8}}>
+                  <div style={{fontSize:12,color:'#666',flexShrink:0}}>Intervalle (h) :</div>
+                  <input type="number" defaultValue={m.intervalH} onBlur={e=>saveMaintenance(maintenance.map(x=>x.id===m.id?{...x,intervalH:parseInt(e.target.value)||x.intervalH}:x))} style={{...inp,padding:'6px 10px',width:80,fontSize:13,fontWeight:700}}/>
                 </div>}
-                <div style={{display:\'flex\',gap:10,alignItems:\'center\'}}>
-                  <div style={{fontSize:12,color:\'#666\',flexShrink:0}}>Dernier fait le :</div>
-                  <input type="date" defaultValue={m.lastDate} onBlur={e=>saveMaintenance(maintenance.map(x=>x.id===m.id?{...x,lastDate:e.target.value}:x))} style={{...inp,padding:\'6px 10px\',flex:1,fontSize:12}}/>
+                <div style={{display:'flex',gap:10,alignItems:'center'}}>
+                  <div style={{fontSize:12,color:'#666',flexShrink:0}}>Fait le :</div>
+                  <input type="date" defaultValue={m.lastDate} onBlur={e=>saveMaintenance(maintenance.map(x=>x.id===m.id?{...x,lastDate:e.target.value}:x))} style={{...inp,padding:'6px 10px',flex:1,fontSize:12}}/>
                 </div>
               </div>}
             </div>
@@ -1541,70 +1531,62 @@ function BilanTab({trips,expenses,totalHours}){
         })}
       </>}
 
-      {/* ── CONSOMMATION ── */}
-      {sub===\'conso\'&&<>
-        <div style={{display:\'flex\',gap:8,marginBottom:14,overflowX:\'auto\'}}>
-          {years.map(y=><button key={y} onClick={()=>setSelectedYear(y)} style={{padding:\'7px 16px\',borderRadius:20,border:`2px solid ${selectedYear===y?\'#0B2845\':\'#E0E0E0\'}`,background:selectedYear===y?\'#0B2845\':\'white\',color:selectedYear===y?\'white\':\'#555\',cursor:\'pointer\',fontSize:13,fontWeight:700,fontFamily:\'inherit\',flexShrink:0}}>{y}</button>)}
+      {sub==='conso'&&<>
+        <div style={{display:'flex',gap:8,marginBottom:14,overflowX:'auto'}}>
+          {years.map(y=><button key={y} onClick={()=>setSelectedYear(y)} style={{padding:'7px 16px',borderRadius:20,border:'2px solid '+(selectedYear===y?'#0B2845':'#E0E0E0'),background:selectedYear===y?'#0B2845':'white',color:selectedYear===y?'white':'#555',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit',flexShrink:0}}>{y}</button>)}
         </div>
-
-        {/* Stats cards */}
-        <div style={{display:\'grid\',gridTemplateColumns:\'1fr 1fr\',gap:10,marginBottom:16}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
           {[
-            {icon:\'⏱️\',label:`Heures moteur ${selectedYear}`,val:`${yHours.toFixed(1)} h`,bg:\'#E3F2FD\',fg:\'#1565C0\'},
-            {icon:\'⛽\',label:`Coût carburant ${selectedYear}`,val:`${yFuel.toFixed(0)} €`,bg:\'#FFF3E0\',fg:\'#E65100\'},
-            {icon:\'💶\',label:`Coût / heure moteur`,val:costPerH?`${costPerH} €/h`:\'N/A\',bg:\'#E8F5E9\',fg:\'#2E7D32\'},
-            {icon:\'🔥\',label:`Conso estimée`,val:litresPerH?`~${litresPerH} L/h`:\'N/A\',bg:\'#FFEBEE\',fg:\'#C62828\'},
+            {icon:'⏱️',label:'Heures moteur '+selectedYear,val:yHours.toFixed(1)+' h',bg:'#E3F2FD',fg:'#1565C0'},
+            {icon:'⛽',label:'Coût carburant '+selectedYear,val:yFuel.toFixed(0)+' €',bg:'#FFF3E0',fg:'#E65100'},
+            {icon:'💶',label:'Coût / heure moteur',val:costPerH?costPerH+' €/h':'N/A',bg:'#E8F5E9',fg:'#2E7D32'},
+            {icon:'🔥',label:'Conso estimée',val:litresPerH?'~'+litresPerH+' L/h':'N/A',bg:'#FFEBEE',fg:'#C62828'},
           ].map((s,i)=>(
-            <div key={i} style={{background:s.bg,borderRadius:12,padding:\'12px 14px\'}}>
+            <div key={i} style={{background:s.bg,borderRadius:12,padding:'12px 14px'}}>
               <div style={{fontSize:20,marginBottom:4}}>{s.icon}</div>
               <div style={{fontSize:10,color:s.fg,marginBottom:2}}>{s.label.toUpperCase()}</div>
               <div style={{fontSize:20,fontWeight:700,color:s.fg}}>{s.val}</div>
             </div>
           ))}
         </div>
-
-        {/* Fuel expenses list */}
-        <div style={{fontSize:11,fontWeight:700,color:\'#666\',letterSpacing:\'.1em\',marginBottom:8}}>PLEINS {selectedYear}</div>
-        {expenses.filter(e=>e.category===\'fuel\'&&new Date(e.date).getFullYear()===selectedYear).length===0?(
-          <div style={{textAlign:\'center\',padding:30,color:\'#888\'}}><div style={{fontSize:32,marginBottom:8}}>⛽</div><div style={{fontSize:13}}>Aucun plein enregistré en {selectedYear}</div></div>
+        <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>PLEINS {selectedYear}</div>
+        {expenses.filter(e=>e.category==='fuel'&&new Date(e.date).getFullYear()===selectedYear).length===0?(
+          <div style={{textAlign:'center',padding:30,color:'#888'}}><div style={{fontSize:32,marginBottom:8}}>⛽</div><div style={{fontSize:13}}>Aucun plein en {selectedYear}</div></div>
         ):(
-          <div style={{background:\'white\',borderRadius:12,border:\'1px solid #E8E8E8\',overflow:\'hidden\'}}>
-            {expenses.filter(e=>e.category===\'fuel\'&&new Date(e.date).getFullYear()===selectedYear).sort((a,b)=>new Date(b.date)-new Date(a.date)).map((e,i,arr)=>(
-              <div key={e.id} style={{display:\'flex\',alignItems:\'center\',gap:12,padding:\'11px 14px\',borderBottom:i<arr.length-1?\'1px solid #F5F5F5\':\'none\'}}>
+          <div style={{background:'white',borderRadius:12,border:'1px solid #E8E8E8',overflow:'hidden'}}>
+            {expenses.filter(e=>e.category==='fuel'&&new Date(e.date).getFullYear()===selectedYear).sort((a,b)=>new Date(b.date)-new Date(a.date)).map((e,i,arr)=>(
+              <div key={e.id} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 14px',borderBottom:i<arr.length-1?'1px solid #F5F5F5':'none'}}>
                 <span style={{fontSize:20}}>⛽</span>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:12,fontWeight:600}}>{e.description||\'Carburant\'}</div>
-                  <div style={{fontSize:11,color:\'#888\'}}>{new Date(e.date).toLocaleDateString(\'fr-FR\',{day:\'numeric\',month:\'short\'})}</div>
+                  <div style={{fontSize:12,fontWeight:600}}>{e.description||'Carburant'}</div>
+                  <div style={{fontSize:11,color:'#888'}}>{new Date(e.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</div>
                 </div>
-                <div style={{fontSize:14,fontWeight:700,color:\'#E65100\'}}>{parseFloat(e.amount).toFixed(2)}€</div>
+                <div style={{fontSize:14,fontWeight:700,color:'#E65100'}}>{parseFloat(e.amount).toFixed(2)}€</div>
               </div>
             ))}
-            <div style={{display:\'flex\',justifyContent:\'space-between\',padding:\'11px 14px\',background:\'#FFF3E0\',fontWeight:700,fontSize:13}}>
+            <div style={{display:'flex',justifyContent:'space-between',padding:'11px 14px',background:'#FFF3E0',fontWeight:700,fontSize:13}}>
               <span>Total carburant {selectedYear}</span>
-              <span style={{color:\'#E65100\'}}>{yFuel.toFixed(2)} €</span>
+              <span style={{color:'#E65100'}}>{yFuel.toFixed(2)} €</span>
             </div>
           </div>
         )}
-        <div style={{marginTop:10,background:\'#F0F4FF\',borderRadius:10,padding:\'10px 14px\',fontSize:11,color:\'#555\',lineHeight:1.6}}>
-          💡 La consommation en L/h est estimée sur la base d\'un prix moyen de 1,85 €/L. Renseignez la quantité dans la description des pleins pour un suivi précis.
+        <div style={{marginTop:10,background:'#F0F4FF',borderRadius:10,padding:'10px 14px',fontSize:11,color:'#555',lineHeight:1.6}}>
+          💡 Conso estimée sur base de 1,85 €/L. Pour un suivi précis, notez la quantité en litres dans la description du plein.
         </div>
       </>}
 
-      {/* ── BILAN PDF ── */}
-      {sub===\'bilan\'&&<>
-        <div style={{display:\'flex\',gap:8,marginBottom:14,overflowX:\'auto\'}}>
-          {years.map(y=><button key={y} onClick={()=>setSelectedYear(y)} style={{padding:\'7px 16px\',borderRadius:20,border:`2px solid ${selectedYear===y?\'#0B2845\':\'#E0E0E0\'}`,background:selectedYear===y?\'#0B2845\':\'white\',color:selectedYear===y?\'white\':\'#555\',cursor:\'pointer\',fontSize:13,fontWeight:700,fontFamily:\'inherit\',flexShrink:0}}>{y}</button>)}
+      {sub==='bilan'&&<>
+        <div style={{display:'flex',gap:8,marginBottom:14,overflowX:'auto'}}>
+          {years.map(y=><button key={y} onClick={()=>setSelectedYear(y)} style={{padding:'7px 16px',borderRadius:20,border:'2px solid '+(selectedYear===y?'#0B2845':'#E0E0E0'),background:selectedYear===y?'#0B2845':'white',color:selectedYear===y?'white':'#555',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit',flexShrink:0}}>{y}</button>)}
         </div>
-
-        {/* Preview */}
-        <div style={{background:\'linear-gradient(135deg,#0B2845,#1A4A7A)\',borderRadius:14,padding:\'18px\',marginBottom:14,color:\'white\'}}>
-          <div style={{fontSize:11,opacity:.7,letterSpacing:\'.1em\',marginBottom:8}}>BILAN {selectedYear} — APERÇU</div>
-          <div style={{display:\'grid\',gridTemplateColumns:\'1fr 1fr\',gap:12\'}}>
+        <div style={{background:'linear-gradient(135deg,#0B2845,#1A4A7A)',borderRadius:14,padding:'18px',marginBottom:14,color:'white'}}>
+          <div style={{fontSize:11,opacity:.7,letterSpacing:'.1em',marginBottom:8}}>BILAN {selectedYear} — APERÇU</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
             {[
-              [`${yTrips.length}`,`sortie${yTrips.length>1?\'s\':\'\'}`],
-              [`${yHours.toFixed(1)}h`,\'moteur\'],
-              [`${yExp.toFixed(0)}€`,\'dépenses\'],
-              [`${(yExp/2).toFixed(0)}€`,\'part/pers.\'],
+              [yTrips.length+'','sortie'+(yTrips.length>1?'s':'')],
+              [yHours.toFixed(1)+'h','moteur'],
+              [yExp.toFixed(0)+'€','dépenses'],
+              [(yExp/2).toFixed(0)+'€','part/pers.'],
             ].map(([v,l],i)=>(
               <div key={i}>
                 <div style={{fontSize:22,fontWeight:700}}>{v}</div>
@@ -1612,44 +1594,42 @@ function BilanTab({trips,expenses,totalHours}){
               </div>
             ))}
           </div>
-          {yTrips.length>0&&<div style={{marginTop:12,fontSize:11,opacity:.7,borderTop:\'1px solid rgba(255,255,255,.15)\',paddingTop:10}}>
-            Équipiers : {[...new Set(yTrips.flatMap(t=>t.crew||[]))].join(\' · \')||\'—\'}
+          {yTrips.length>0&&<div style={{marginTop:12,fontSize:11,opacity:.7,borderTop:'1px solid rgba(255,255,255,.15)',paddingTop:10}}>
+            Équipiers : {[...new Set(yTrips.flatMap(t=>t.crew||[]))].join(' · ')||'—'}
           </div>}
         </div>
-
-        {/* Dépenses par catégorie */}
-        <div style={{fontSize:11,fontWeight:700,color:\'#666\',letterSpacing:\'.1em\',marginBottom:8}}>DÉPENSES PAR CATÉGORIE</div>
-        <div style={{background:\'white\',borderRadius:12,border:\'1px solid #E8E8E8\',overflow:\'hidden\',marginBottom:16}}>
+        <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em',marginBottom:8}}>DÉPENSES PAR CATÉGORIE</div>
+        <div style={{background:'white',borderRadius:12,border:'1px solid #E8E8E8',overflow:'hidden',marginBottom:16}}>
           {CATS.map((c,i)=>{
             const total=expenses.filter(e=>e.category===c.id&&new Date(e.date).getFullYear()===selectedYear).reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
             if(!total)return null;
             const pct=yExp>0?Math.round(total/yExp*100):0;
             return(
-              <div key={c.id} style={{display:\'flex\',alignItems:\'center\',gap:12,padding:\'10px 14px\',borderBottom:i<CATS.length-1?\'1px solid #F5F5F5\':\'none\'}}>
+              <div key={c.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',borderBottom:i<CATS.length-1?'1px solid #F5F5F5':'none'}}>
                 <span style={{fontSize:20}}>{c.icon}</span>
                 <div style={{flex:1}}>
                   <div style={{fontSize:12,fontWeight:600}}>{c.label}</div>
-                  <div style={{height:4,background:\'#F0F0F0\',borderRadius:2,marginTop:4,overflow:\'hidden\'}}>
-                    <div style={{height:\'100%\',width:`${pct}%`,background:c.fg,borderRadius:2}}/>
+                  <div style={{height:4,background:'#F0F0F0',borderRadius:2,marginTop:4,overflow:'hidden'}}>
+                    <div style={{height:'100%',width:pct+'%',background:c.fg,borderRadius:2}}/>
                   </div>
                 </div>
-                <div style={{textAlign:\'right\'}}>
+                <div style={{textAlign:'right'}}>
                   <div style={{fontSize:13,fontWeight:700}}>{total.toFixed(0)}€</div>
-                  <div style={{fontSize:10,color:\'#888\'}}>{pct}%</div>
+                  <div style={{fontSize:10,color:'#888'}}>{pct}%</div>
                 </div>
               </div>
             );
           })}
         </div>
-
-        <button onClick={exportPDF} style={{...btn(),width:\'100%\',padding:14,fontSize:14,borderRadius:12,display:\'flex\',alignItems:\'center\',justifyContent:\'center\',gap:10}}>
+        <button onClick={exportPDF} style={{...btn(),width:'100%',padding:14,fontSize:14,borderRadius:12,display:'flex',alignItems:'center',justifyContent:'center',gap:10}}>
           <span style={{fontSize:20}}>📄</span> Exporter le bilan {selectedYear} en PDF
         </button>
-        <div style={{marginTop:8,fontSize:11,color:\'#888\',textAlign:\'center\'}}>Contient : sorties, équipage, dépenses, totaux</div>
+        <div style={{marginTop:8,fontSize:11,color:'#888',textAlign:'center'}}>Sorties, équipage, dépenses, totaux</div>
       </>}
     </div>
   );
 }
+
 
 function Sec({label,children}){return<div style={{marginBottom:20}}><div style={{fontSize:10,fontWeight:700,color:'#888',letterSpacing:'.1em',marginBottom:10}}>{label}</div><div style={{display:'flex',flexDirection:'column',gap:10}}>{children}</div></div>;}
 function Fld({label,children}){return<div><div style={{fontSize:12,color:'#666',marginBottom:4,fontWeight:500}}>{label}</div>{children}</div>;}
