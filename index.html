@@ -9,6 +9,7 @@
   <meta name="theme-color" content="#0B2845">
   <link rel="manifest" href="manifest.json">
   <title>Leader 805 — Carnet de Bord</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     html,body{height:100%;overflow:hidden;background:#0B2845}
@@ -25,6 +26,7 @@
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="text/babel">
 const{useState,useEffect,useCallback}=React;
 
@@ -536,12 +538,22 @@ function Tag({children}){return<span style={{fontSize:10,background:'#F0F0F0',bo
 
 function TripForm({trip,onSave,onCancel}){
   const today=new Date().toISOString().slice(0,10);
-  const[f,setF]=useState(trip||{date:today,departTime:'',returnTime:'',route:'',engineStart:'',engineEnd:'',crew:[],windForce:'',seaState:'',weather:'',checkDep:{},checkRet:{},notes:''});
+  const[f,setF]=useState(trip||{date:today,departTime:'',returnTime:'',route:'',waypoints:[],engineStart:'',engineEnd:'',crew:[],windForce:'',seaState:'',weather:'',checkDep:{},checkRet:{},notes:''});
   const[ck,setCk]=useState('dep');
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
   const toggleCrew=m=>set('crew',f.crew.includes(m)?f.crew.filter(x=>x!==m):[...f.crew,m]);
   const toggleCheck=(type,item)=>{const k=type==='dep'?'checkDep':'checkRet';set(k,{...f[k],[item]:!f[k][item]});};
   const dur=f.engineStart&&f.engineEnd&&parseFloat(f.engineEnd)>parseFloat(f.engineStart)?(parseFloat(f.engineEnd)-parseFloat(f.engineStart)).toFixed(1):null;
+
+  // Waypoints helpers
+  const waypoints=f.waypoints||[];
+  const setWaypoints=list=>{
+    const route=list.filter(Boolean).join(' → ');
+    setF(p=>({...p,waypoints:list,route}));
+  };
+  const addWaypoint=()=>setWaypoints([...waypoints,'']);
+  const setWaypoint=(i,v)=>{const w=[...waypoints];w[i]=v;setWaypoints(w);};
+  const removeWaypoint=i=>setWaypoints(waypoints.filter((_,j)=>j!==i));
 
   return(
     <div style={{padding:16}}>
@@ -551,7 +563,26 @@ function TripForm({trip,onSave,onCancel}){
       </div>
       <Sec label="INFORMATIONS GÉNÉRALES">
         <Fld label="Date"><input type="date" value={f.date} onChange={e=>set('date',e.target.value)} style={inp}/></Fld>
-        <Fld label="Parcours"><input type="text" value={f.route} onChange={e=>set('route',e.target.value)} placeholder="Carro → Carry → Niolon" style={inp}/></Fld>
+        {/* Waypoints editor */}
+        <Fld label="Parcours — points de passage">
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {waypoints.length===0&&(
+              <div style={{fontSize:12,color:'#AAA',fontStyle:'italic'}}>Aucun point saisi — cliquez + pour ajouter départ, escales et retour</div>
+            )}
+            {waypoints.map((w,i)=>(
+              <div key={i} style={{display:'flex',gap:8,alignItems:'center'}}>
+                <span style={{fontSize:16,flexShrink:0}}>{i===0?'⚓':i===waypoints.length-1?'🏁':'⚡'}</span>
+                <input type="text" value={w} onChange={e=>setWaypoint(i,e.target.value)}
+                  placeholder={i===0?'Port de départ (ex: Carro)':i===waypoints.length-1?'Port de retour':'Escale (ex: Carry-le-Rouet)'}
+                  style={{...inp,flex:1}}/>
+                <button onClick={()=>removeWaypoint(i)} style={{background:'#FFEBEE',border:'none',borderRadius:6,padding:'7px 10px',cursor:'pointer',fontSize:13,color:'#C62828',flexShrink:0}}>✕</button>
+              </div>
+            ))}
+            <button onClick={addWaypoint} style={{padding:'9px 14px',borderRadius:10,border:'1.5px dashed #C0C0C0',background:'transparent',cursor:'pointer',fontSize:12,fontWeight:600,color:'#1565C0',textAlign:'left',fontFamily:'inherit'}}>
+              + Ajouter {waypoints.length===0?'le port de départ':waypoints.length===1?'une escale ou le retour':'une escale / le retour'}
+            </button>
+          </div>
+        </Fld>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
           <Fld label="Départ"><input type="time" value={f.departTime} onChange={e=>set('departTime',e.target.value)} style={inp}/></Fld>
           <Fld label="Retour"><input type="time" value={f.returnTime} onChange={e=>set('returnTime',e.target.value)} style={inp}/></Fld>
@@ -603,6 +634,111 @@ function TripForm({trip,onSave,onCancel}){
   );
 }
 
+// ── RouteMap ─────────────────────────────────────────────────────────────────
+const ZONE_DEFAULT=[43.33,5.03]; // Carro / Côte Bleue
+
+async function geocode(name){
+  try{
+    const q=encodeURIComponent(name+', France, Méditerranée');
+    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1`,{headers:{'Accept-Language':'fr'}});
+    const d=await r.json();
+    if(d[0])return[parseFloat(d[0].lat),parseFloat(d[0].lon)];
+  }catch{}
+  return null;
+}
+
+function RouteMap({waypoints,date}){
+  const mapRef=React.useRef(null);
+  const mapInstance=React.useRef(null);
+  const[loading,setLoading]=useState(true);
+  const[coords,setCoords]=useState([]);
+  const[error,setError]=useState(false);
+
+  useEffect(()=>{
+    if(!waypoints?.length)return;
+    let cancelled=false;
+    (async()=>{
+      setLoading(true);
+      const results=await Promise.all(waypoints.map(w=>geocode(w)));
+      if(cancelled)return;
+      const valid=results.filter(Boolean);
+      if(valid.length<1){setError(true);setLoading(false);return;}
+      setCoords(valid);
+      setLoading(false);
+    })();
+    return()=>{cancelled=true;};
+  },[waypoints?.join('|')]);
+
+  useEffect(()=>{
+    if(!mapRef.current||coords.length<1||loading)return;
+    // Destroy previous instance
+    if(mapInstance.current){mapInstance.current.remove();mapInstance.current=null;}
+    const center=coords.length===1?coords[0]:coords[Math.floor(coords.length/2)];
+    const map=L.map(mapRef.current,{zoomControl:true,attributionControl:false}).setView(center,11);
+    mapInstance.current=map;
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(map);
+    // Markers
+    const icons={
+      start:L.divIcon({className:'',html:'<div style="background:#2E7D32;color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.3)">⚓</div>',iconSize:[28,28],iconAnchor:[14,14]}),
+      end:L.divIcon({className:'',html:'<div style="background:#C62828;color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.3)">🏁</div>',iconSize:[28,28],iconAnchor:[14,14]}),
+      mid:L.divIcon({className:'',html:'<div style="background:#1565C0;color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,.3)">⚡</div>',iconSize:[22,22],iconAnchor:[11,11]}),
+    };
+    coords.forEach((c,i)=>{
+      const icon=i===0?icons.start:i===coords.length-1?icons.end:icons.mid;
+      const label=waypoints[i]||'';
+      L.marker(c,{icon}).addTo(map).bindPopup(`<b>${label}</b>`);
+    });
+    if(coords.length>1){
+      L.polyline(coords,{color:'#1565C0',weight:3,opacity:.8,dashArray:'8,6'}).addTo(map);
+      map.fitBounds(L.latLngBounds(coords).pad(0.3));
+    }
+    return()=>{if(mapInstance.current){mapInstance.current.remove();mapInstance.current=null;}};
+  },[coords,loading]);
+
+  // Google Maps URL
+  const gmUrl=waypoints?.length?`https://www.google.com/maps/dir/${waypoints.map(w=>encodeURIComponent(w+' France')).join('/')}`:null;
+
+  if(!waypoints?.length)return null;
+
+  return(
+    <div style={{marginBottom:14}}>
+      <div style={{fontSize:10,fontWeight:700,color:'#888',letterSpacing:'.1em',marginBottom:8}}>TRACÉ DU PARCOURS</div>
+      <div style={{background:'white',borderRadius:12,border:'1px solid #E8E8E8',overflow:'hidden'}}>
+        {/* Waypoints pills */}
+        <div style={{padding:'10px 14px',borderBottom:'1px solid #F0F0F0',display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+          {waypoints.map((w,i)=>(
+            <React.Fragment key={i}>
+              <span style={{fontSize:12,fontWeight:600,color:'#0B2845',background:'#E8F0FF',padding:'3px 10px',borderRadius:20}}>{i===0?'⚓ ':i===waypoints.length-1?'🏁 ':'⚡ '}{w}</span>
+              {i<waypoints.length-1&&<span style={{fontSize:12,color:'#CCC'}}>→</span>}
+            </React.Fragment>
+          ))}
+        </div>
+        {/* Map */}
+        <div style={{position:'relative',height:220}}>
+          {loading&&(
+            <div style={{position:'absolute',inset:0,background:'#F5F6F8',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:8,zIndex:10}}>
+              <div style={{fontSize:24}}>🗺️</div>
+              <div style={{fontSize:12,color:'#888'}}>Chargement de la carte…</div>
+            </div>
+          )}
+          {error&&(
+            <div style={{position:'absolute',inset:0,background:'#F5F6F8',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:8,zIndex:10}}>
+              <div style={{fontSize:12,color:'#888'}}>Carte indisponible — vérifiez la connexion</div>
+            </div>
+          )}
+          <div ref={mapRef} style={{width:'100%',height:'100%'}}/>
+        </div>
+        {/* Google Maps button */}
+        {gmUrl&&(
+          <a href={gmUrl} target="_blank" rel="noopener noreferrer" style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:'12px 16px',borderTop:'1px solid #F0F0F0',textDecoration:'none',color:'#1A3A8F',fontSize:13,fontWeight:700,background:'#F0F4FF'}}>
+            <span style={{fontSize:18}}>🗺️</span> Ouvrir l'itinéraire dans Google Maps
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TripDetail({trip,onBack,onEdit,onDelete}){
   const dur=trip.engineStart&&trip.engineEnd?Math.max(0,(parseFloat(trip.engineEnd)-parseFloat(trip.engineStart))).toFixed(1):null;
   const depOk=CHECK_DEP.filter(i=>trip.checkDep?.[i]).length;
@@ -629,6 +765,7 @@ function TripDetail({trip,onBack,onEdit,onDelete}){
         {trip.crew?.length>0&&<Mini icon="👥" label="Équipage" val={`${trip.crew.length} pers.`}/>}
       </div>
       {trip.crew?.length>0&&<Bloc label="ÉQUIPAGE"><p style={{margin:0,fontSize:13}}>{trip.crew.join(' · ')}</p></Bloc>}
+      {trip.waypoints?.length>0&&<RouteMap waypoints={trip.waypoints} date={trip.date}/>}
       {(trip.windForce||trip.seaState||trip.weather)&&<Bloc label="MÉTÉO">
         {trip.windForce&&<p style={{margin:'0 0 4px',fontSize:13}}>💨 {trip.windForce}</p>}
         {trip.seaState&&<p style={{margin:'0 0 4px',fontSize:13}}>🌊 {trip.seaState}</p>}
