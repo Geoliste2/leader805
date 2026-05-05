@@ -1407,13 +1407,12 @@ function BilanTab({trips,expenses,totalHours}){
 
   const mStatus=m=>{
     if(m.annuel){
-      if(!m.lastDate)return 'warning'; // jamais fait = à planifier, pas "dépassé"
+      if(!m.lastDate)return 'warning';
       return new Date().getFullYear()-new Date(m.lastDate).getFullYear()>=1?'overdue':'ok';
     }
-    const lastH=m.lastH||0;
-    // Si lastH < hoursBase et jamais modifié manuellement → poste non calibré, neutre
-    if(lastH<hoursBase&&lastH===0)return 'ok';
-    const rem=lastH+m.intervalH-totalHours;
+    // L'horomètre effectif du dernier entretien ne peut pas être < base
+    const effectiveLastH=Math.max(m.lastH||0, hoursBase);
+    const rem=effectiveLastH+m.intervalH-totalHours;
     if(rem<=0)return 'overdue';
     if(rem<=15)return 'warning';
     return 'ok';
@@ -1526,12 +1525,12 @@ function BilanTab({trips,expenses,totalHours}){
         </div>
         {maintenance.map(m=>{
           const st=mStatus(m);
-          const lastH=m.lastH||0;
-          const next=m.annuel?null:Math.round(lastH+m.intervalH);
+          const effectiveLastH=Math.max(m.lastH||0, hoursBase);
+          const next=m.annuel?null:Math.round(effectiveLastH+m.intervalH);
           const rem=m.annuel?null:Math.round(next-totalHours);
           const color=st==='overdue'?'#C62828':st==='warning'?'#E65100':'#2E7D32';
           const bg=st==='overdue'?'#FFEBEE':st==='warning'?'#FFF3E0':'#E8F5E9';
-          const pct=m.annuel?100:Math.min(100,Math.max(0,Math.round(((totalHours-lastH)/m.intervalH)*100)));
+          const pct=m.annuel?100:Math.min(100,Math.max(0,Math.round(((totalHours-effectiveLastH)/m.intervalH)*100)));
           return(
             <div key={m.id} style={{background:'white',borderRadius:12,border:'1.5px solid '+(st==='ok'?'#E8E8E8':color),padding:'12px 14px',marginBottom:10}}>
               <div style={{display:'flex',alignItems:'flex-start',gap:10,marginBottom:8}}>
@@ -1539,8 +1538,8 @@ function BilanTab({trips,expenses,totalHours}){
                 <div style={{flex:1}}>
                   <div style={{fontSize:13,fontWeight:700}}>{m.label}</div>
                   <div style={{fontSize:11,color:'#888',marginTop:1}}>
-                    {m.annuel?(m.lastDate?'Dernier : '+new Date(m.lastDate).toLocaleDateString('fr-FR')+' — Annuel':'Jamais effectué')
-                    :'Dernier : '+(m.lastH||0)+'h · Prochain : '+next+'h'}
+                    {m.annuel?(m.lastDate?'Dernier : '+new Date(m.lastDate).toLocaleDateString('fr-FR')+' — Annuel':'Jamais effectué — à planifier')
+                    :'Dernier : '+effectiveLastH+'h · Prochain : '+next+'h'}
                   </div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>
