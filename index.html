@@ -296,7 +296,7 @@ function App(){
           </div>
         ):(
           <>
-            {tab===0&&<Dashboard trips={trips} expenses={expenses} totalHours={totalHours} totalExp={totalExp} navTo={navTo} boatCode={boatCode}/>}
+            {tab===0&&<Dashboard trips={trips} expenses={expenses} totalHours={totalHours} totalExp={totalExp} navTo={navTo} boatCode={boatCode} hoursBase={hoursBase}/>}
             {tab===1&&<LogbookTab trips={trips} upsertTrip={upsertTrip} deleteTrip={deleteTrip} view={view} setView={setView} editItem={editItem} setEditItem={setEditItem}/>}
             {tab===2&&<ExpensesTab expenses={expenses} upsertExpense={upsertExpense} deleteExpense={deleteExpense} view={view} setView={setView} editItem={editItem} setEditItem={setEditItem} totalExp={totalExp} boatCode={boatCode}/>}
             {tab===3&&<AdminTab docs={docs} upsertDoc={upsertDoc} deleteDoc={deleteDoc}/>}
@@ -410,7 +410,7 @@ function WeatherCard(){
   );
 }
 
-function Dashboard({trips,expenses,totalHours,totalExp,navTo,boatCode}){
+function Dashboard({trips,expenses,totalHours,totalExp,navTo,boatCode,hoursBase}){
   const lastTrip=trips.length?trips[trips.length-1]:null;
   const yr=new Date().getFullYear(),mo=new Date().getMonth();
   const tripsYr=trips.filter(t=>new Date(t.date).getFullYear()===yr).length;
