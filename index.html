@@ -475,9 +475,14 @@ function WeatherCard(){
 function SharedNotes({boatCode}){
   const[notes,setNotes]=useState([]);
   const[text,setText]=useState('');
+  const[photo,setPhoto]=useState(null);
   const[author,setAuthor]=useState(()=>localStorage.getItem('leader805_author')||'');
   const[showAuthor,setShowAuthor]=useState(false);
   const[loading,setLoading]=useState(true);
+  const[editingId,setEditingId]=useState(null);
+  const[editText,setEditText]=useState('');
+  const[viewingPhoto,setViewingPhoto]=useState(null);
+  const[compressing,setCompressing]=useState(false);
 
   const loadNotes=async()=>{
     try{
@@ -490,25 +495,28 @@ function SharedNotes({boatCode}){
   useEffect(()=>{
     if(!boatCode)return;
     loadNotes();
-    // Realtime
     const ch=db.channel('notes-'+boatCode)
       .on('postgres_changes',{event:'*',schema:'public',table:'notes',filter:`boat_code=eq.${boatCode}`},()=>loadNotes())
       .subscribe();
     return()=>ch.unsubscribe();
   },[boatCode]);
 
-  const saveAuthor=name=>{
-    localStorage.setItem('leader805_author',name);
-    setAuthor(name);
-    setShowAuthor(false);
+  const saveAuthor=name=>{localStorage.setItem('leader805_author',name);setAuthor(name);setShowAuthor(false);};
+
+  const handlePhoto=async file=>{
+    if(!file)return;
+    setCompressing(true);
+    const p=await compressImage(file);
+    setPhoto(p);
+    setCompressing(false);
   };
 
   const postNote=async()=>{
-    if(!text.trim())return;
+    if(!text.trim()&&!photo)return;
     if(!author){setShowAuthor(true);return;}
     try{
-      await db.from('notes').insert({id:uid(),boat_code:boatCode,author,text:text.trim(),created_at:new Date().toISOString()});
-      setText('');
+      await db.from('notes').insert({id:uid(),boat_code:boatCode,author,text:text.trim(),photo:photo||null,created_at:new Date().toISOString()});
+      setText('');setPhoto(null);
       loadNotes();
     }catch{}
   };
@@ -518,16 +526,29 @@ function SharedNotes({boatCode}){
     setNotes(p=>p.filter(n=>n.id!==id));
   };
 
+  const startEdit=(n)=>{setEditingId(n.id);setEditText(n.text);};
+
+  const saveEdit=async id=>{
+    if(!editText.trim())return;
+    try{
+      await db.from('notes').update({text:editText.trim()}).eq('id',id);
+      setNotes(p=>p.map(n=>n.id===id?{...n,text:editText.trim()}:n));
+    }catch{}
+    setEditingId(null);setEditText('');
+  };
+
   const timeAgo=d=>{
     const s=Math.round((Date.now()-new Date(d))/1000);
     if(s<60)return 'à l\'instant';
     if(s<3600)return Math.floor(s/60)+'min';
     if(s<86400)return Math.floor(s/3600)+'h';
-    return Math.floor(s/86400)+'j';
+    const days=Math.floor(s/86400);
+    return days===1?'hier':days+'j';
   };
 
   const COLORS={'Stéphane':'#0B2845','Olivier':'#1565C0','Lubin':'#2E7D32','Aurélie':'#AD1457','Claire-Lise':'#6A1B9A','Maman':'#E65100'};
   const authorColor=a=>COLORS[a]||'#555';
+  const canSend=text.trim()||photo;
 
   if(showAuthor)return(
     <div style={{background:'white',borderRadius:12,padding:14,marginBottom:14,border:'1px solid #E8E8E8'}}>
@@ -542,39 +563,100 @@ function SharedNotes({boatCode}){
 
   return(
     <div style={{background:'white',borderRadius:12,marginBottom:14,border:'1px solid #E8E8E8',overflow:'hidden'}}>
-      <div style={{padding:'12px 14px 8px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-        <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em'}}>📝 NOTES PARTAGÉES</div>
+      {/* Header */}
+      <div style={{padding:'10px 14px 8px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid #F5F5F5'}}>
+        <div style={{fontSize:11,fontWeight:700,color:'#666',letterSpacing:'.1em'}}>📝 NOTES DE L'ÉQUIPAGE</div>
         {author&&<button onClick={()=>setShowAuthor(true)} style={{fontSize:10,color:'#888',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit'}}>{author} ▾</button>}
       </div>
+
       {/* Notes list */}
       {loading?(
-        <div style={{padding:'10px 14px',fontSize:12,color:'#AAA'}}>Chargement…</div>
+        <div style={{padding:'12px 14px',fontSize:12,color:'#AAA'}}>Chargement…</div>
       ):notes.length===0?(
-        <div style={{padding:'8px 14px',fontSize:12,color:'#AAA',fontStyle:'italic'}}>Aucune note — soyez le premier à écrire !</div>
+        <div style={{padding:'12px 14px',fontSize:12,color:'#AAA',fontStyle:'italic'}}>Aucune note — soyez le premier à écrire !</div>
       ):(
-        <div style={{maxHeight:200,overflowY:'auto'}}>
+        <div style={{maxHeight:260,overflowY:'auto'}}>
           {notes.map(n=>(
-            <div key={n.id} style={{display:'flex',gap:10,padding:'8px 14px',borderTop:'1px solid #F5F5F5'}}>
-              <div style={{width:28,height:28,borderRadius:14,background:authorColor(n.author),color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>
-                {n.author?.[0]||'?'}
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:'flex',gap:6,alignItems:'baseline',marginBottom:2}}>
-                  <span style={{fontSize:11,fontWeight:700,color:authorColor(n.author)}}>{n.author}</span>
-                  <span style={{fontSize:10,color:'#BBB'}}>{timeAgo(n.created_at)}</span>
+            <div key={n.id} style={{padding:'10px 14px',borderBottom:'1px solid #F8F8F8'}}>
+              <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+                {/* Avatar */}
+                <div style={{width:30,height:30,borderRadius:15,background:authorColor(n.author),color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0}}>
+                  {n.author?.[0]||'?'}
                 </div>
-                <div style={{fontSize:13,color:'#333',lineHeight:1.5}}>{n.text}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  {/* Header */}
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:3}}>
+                    <div style={{display:'flex',gap:6,alignItems:'baseline'}}>
+                      <span style={{fontSize:11,fontWeight:700,color:authorColor(n.author)}}>{n.author}</span>
+                      <span style={{fontSize:10,color:'#CCC'}}>{timeAgo(n.created_at)}</span>
+                    </div>
+                    {/* Actions */}
+                    {n.author===author&&(
+                      <div style={{display:'flex',gap:6}}>
+                        <button onClick={()=>startEdit(n)} style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:'#CCC',padding:0,fontFamily:'inherit'}}>✏️</button>
+                        <button onClick={()=>deleteNote(n.id)} style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:'#DDD',padding:0,fontFamily:'inherit'}}>✕</button>
+                      </div>
+                    )}
+                  </div>
+                  {/* Content or edit */}
+                  {editingId===n.id?(
+                    <div style={{display:'flex',gap:6,marginTop:4}}>
+                      <input value={editText} onChange={e=>setEditText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')saveEdit(n.id);if(e.key==='Escape'){setEditingId(null);setEditText('');}}}
+                        autoFocus style={{...inp,flex:1,padding:'6px 10px',fontSize:12}}/>
+                      <button onClick={()=>saveEdit(n.id)} style={{...btn(),...{padding:'6px 10px',borderRadius:8,fontSize:12}}}>✓</button>
+                      <button onClick={()=>{setEditingId(null);setEditText('');}} style={{...btn('#F0F0F0','#555'),...{padding:'6px 10px',borderRadius:8,fontSize:12}}}>✕</button>
+                    </div>
+                  ):(
+                    <>
+                      {n.text&&<div style={{fontSize:13,color:'#333',lineHeight:1.55}}>{n.text}</div>}
+                      {n.photo&&(
+                        <img src={n.photo} onClick={()=>setViewingPhoto(n.photo)}
+                          style={{marginTop:6,width:'100%',maxWidth:220,height:100,objectFit:'cover',borderRadius:8,cursor:'pointer',display:'block',border:'1px solid #E8E8E8'}}
+                          alt="note"/>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
-              {n.author===author&&<button onClick={()=>deleteNote(n.id)} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,color:'#DDD',flexShrink:0,padding:'0 2px'}}>✕</button>}
             </div>
           ))}
         </div>
       )}
-      {/* Input */}
-      <div style={{padding:'10px 14px',borderTop:'1px solid #F0F0F0',display:'flex',gap:8}}>
-        <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&postNote()} placeholder="Plein à 3/4, vérifier les amarres..." style={{...inp,flex:1,padding:'8px 12px',fontSize:12}}/>
-        <button onClick={postNote} disabled={!text.trim()} style={{...btn(text.trim()?'#0B2845':'#CCC','white'),padding:'8px 14px',borderRadius:10,flexShrink:0,cursor:text.trim()?'pointer':'default'}}>→</button>
+
+      {/* Photo preview if selected */}
+      {photo&&(
+        <div style={{padding:'6px 14px 0',display:'flex',alignItems:'center',gap:8}}>
+          <img src={photo} style={{width:56,height:40,objectFit:'cover',borderRadius:6,border:'1px solid #E0E0E0'}} alt="preview"/>
+          <button onClick={()=>setPhoto(null)} style={{fontSize:11,color:'#C62828',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',fontWeight:600}}>✕ Supprimer</button>
+        </div>
+      )}
+
+      {/* Input area */}
+      <div style={{padding:'10px 14px',borderTop:'1px solid #F0F0F0'}}>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <input value={text} onChange={e=>setText(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&postNote()}
+            placeholder={author?'Votre note…':'Identifiez-vous d\'abord'}
+            style={{...inp,flex:1,padding:'8px 12px',fontSize:12}}/>
+          {/* Photo button */}
+          <label style={{cursor:'pointer',flexShrink:0}}>
+            <input type="file" accept="image/*" style={{display:'none'}} onChange={e=>handlePhoto(e.target.files[0])} disabled={compressing}/>
+            <div style={{width:36,height:36,borderRadius:10,background:photo?'#E8F5E9':'#F0F0F0',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,cursor:'pointer'}}>
+              {compressing?'⏳':'📷'}
+            </div>
+          </label>
+          {/* Send */}
+          <button onClick={postNote} disabled={!canSend} style={{...btn(canSend?'#0B2845':'#CCC','white'),...{padding:'8px 14px',borderRadius:10,flexShrink:0,cursor:canSend?'pointer':'default'}}}>→</button>
+        </div>
       </div>
+
+      {/* Fullscreen photo viewer */}
+      {viewingPhoto&&(
+        <div onClick={()=>setViewingPhoto(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.92)',zIndex:2000,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:20}}>
+          <img src={viewingPhoto} style={{maxWidth:'100%',maxHeight:'80vh',borderRadius:12,objectFit:'contain'}} alt="note"/>
+          <button onClick={()=>setViewingPhoto(null)} style={{marginTop:20,padding:'10px 30px',borderRadius:24,background:'white',border:'none',cursor:'pointer',fontSize:13,fontWeight:700,color:'#0B2845'}}>Fermer</button>
+        </div>
+      )}
     </div>
   );
 }
