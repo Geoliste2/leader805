@@ -481,6 +481,8 @@ function SharedNotes({boatCode}){
   const[loading,setLoading]=useState(true);
   const[editingId,setEditingId]=useState(null);
   const[editText,setEditText]=useState('');
+  const[showAll,setShowAll]=useState(false);
+  const displayedNotes=showAll?notes:notes.slice(0,1);
   const[viewingPhoto,setViewingPhoto]=useState(null);
   const[compressing,setCompressing]=useState(false);
 
@@ -575,8 +577,8 @@ function SharedNotes({boatCode}){
       ):notes.length===0?(
         <div style={{padding:'12px 14px',fontSize:12,color:'#AAA',fontStyle:'italic'}}>Aucune note — soyez le premier à écrire !</div>
       ):(
-        <div style={{maxHeight:260,overflowY:'auto'}}>
-          {notes.map(n=>(
+        <div>
+          {displayedNotes.map(n=>(
             <div key={n.id} style={{padding:'10px 14px',borderBottom:'1px solid #F8F8F8'}}>
               <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
                 {/* Avatar */}
@@ -621,6 +623,13 @@ function SharedNotes({boatCode}){
             </div>
           ))}
         </div>
+      )}
+
+      {/* Historique toggle */}
+      {notes.length>1&&(
+        <button onClick={()=>setShowAll(p=>!p)} style={{width:'100%',padding:'8px 14px',background:'#F8F8F8',border:'none',borderTop:'1px solid #F0F0F0',cursor:'pointer',fontSize:11,color:'#888',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+          {showAll?`▲ Masquer l'historique`:`▼ Voir les ${notes.length-1} note${notes.length>2?'s':''} précédente${notes.length>2?'s':''}`}
+        </button>
       )}
 
       {/* Photo preview if selected */}
