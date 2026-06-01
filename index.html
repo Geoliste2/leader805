@@ -1144,7 +1144,7 @@ function ExpensesTab({expenses,upsertExpense,deleteExpense,view,setView,editItem
                 <div style={{fontSize:10,opacity:.6,marginBottom:3}}>{LABEL[m].toUpperCase()}</div>
                 <div style={{fontSize:20,fontWeight:700}}>{effectif[m].toFixed(2)}€</div>
                 <div style={{fontSize:9,opacity:.45,marginTop:2}}>
-                  payé {paid[m].toFixed(0)}€{tOut[m]>0?\` + versé ${tOut[m].toFixed(0)}€\`:''}{tIn[m]>0?\` − reçu ${tIn[m].toFixed(0)}€':''} 
+                  payé {paid[m].toFixed(0)}€{tOut[m]>0?' + versé '+tOut[m].toFixed(0)+'€':''}{tIn[m]>0?' − reçu '+tIn[m].toFixed(0)+'€':''}'} 
                 </div>
               </div>
             ))}
@@ -1173,7 +1173,7 @@ function ExpensesTab({expenses,upsertExpense,deleteExpense,view,setView,editItem
                 </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13,fontWeight:600}}>{LABEL[v.from_user]||v.from_user} → {LABEL[v.to_user]||v.to_user}</div>
-                  <div style={{fontSize:11,color:'#888',marginTop:1}}>{new Date(v.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})}{v.note&&\` · ${v.note}\`}</div>
+                  <div style={{fontSize:11,color:'#888',marginTop:1}}>{new Date(v.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})}{v.note&&' · '+v.note}</div>
                 </div>
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
                   <div style={{fontSize:15,fontWeight:700,color:'#2E7D32'}}>{parseFloat(v.amount).toFixed(2)}€</div>
