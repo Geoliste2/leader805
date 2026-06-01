@@ -1138,18 +1138,32 @@ function ExpensesTab({expenses,upsertExpense,deleteExpense,view,setView,editItem
         <div style={{fontSize:30,fontWeight:700,marginBottom:12}}>{totalGeneral.toFixed(2)} €</div>
         <div style={{borderTop:'1px solid rgba(255,255,255,.15)',paddingTop:10}}>
           <div style={{fontSize:10,opacity:.55,marginBottom:8,letterSpacing:'.06em'}}>CONTRIBUTIONS EFFECTIVES (après versements)</div>
-          <div style={{display:'flex',gap:0}}>
+          {/* Stéphane & Olivier */}
+          <div style={{display:'flex',gap:0,marginBottom:8}}>
             {['stephane','olivier'].map((m,i,arr)=>(
               <div key={m} style={{flex:1,paddingRight:i<arr.length-1?12:0,borderRight:i<arr.length-1?'1px solid rgba(255,255,255,.15)':'none',paddingLeft:i>0?12:0}}>
                 <div style={{fontSize:10,opacity:.6,marginBottom:3}}>{LABEL[m].toUpperCase()}</div>
                 <div style={{fontSize:20,fontWeight:700}}>{effectif[m].toFixed(2)}€</div>
                 <div style={{fontSize:9,opacity:.45,marginTop:2}}>
-                  payé {paid[m].toFixed(0)}€{tOut[m]>0?' + versé '+tOut[m].toFixed(0)+'€':''}{tIn[m]>0?' − reçu '+tIn[m].toFixed(0)+'€':''}'} 
+                  payé {paid[m].toFixed(0)}€{tOut[m]>0?' + versé '+tOut[m].toFixed(0)+'€':''}{tIn[m]>0?' − reçu '+tIn[m].toFixed(0)+'€':''}
                 </div>
               </div>
             ))}
           </div>
-          {paid.commun>0&&<div style={{fontSize:10,opacity:.45,marginTop:8}}>Commun : {paid.commun.toFixed(0)}€</div>}
+          {/* Autres contributeurs */}
+          <div style={{borderTop:'1px solid rgba(255,255,255,.1)',paddingTop:8,display:'flex',flexWrap:'wrap',gap:12}}>
+            {[['lubin','Lubin'],['claire_lise','Claire-Lise'],['commun','Commun (50/50)']].map(([key,label])=>{
+              const montant=key==='commun'?paid.commun:(paid[key]||0)+(tOut[key]||0)-(tIn[key]||0);
+              if(montant<=0)return null;
+              return(
+                <div key={key}>
+                  <div style={{fontSize:9,opacity:.5,marginBottom:2}}>{label.toUpperCase()}</div>
+                  <div style={{fontSize:15,fontWeight:700,opacity:.85}}>{montant.toFixed(2)}€</div>
+                  {key==='commun'&&<div style={{fontSize:8,opacity:.4}}>→ {(paid.commun/2).toFixed(0)}€/pers.</div>}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
